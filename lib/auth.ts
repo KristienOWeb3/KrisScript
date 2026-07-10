@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
-import db from "./db";
+import { one } from "./db";
 
 const SECRET = process.env.AUTH_SECRET || "kris-script-dev-secret";
 const SESSION_TTL = 30 * 86400;
@@ -64,8 +64,6 @@ export async function currentUser(): Promise<User | null> {
   )
     return null;
   if (parseInt(exp, 10) < Date.now() / 1000) return null;
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(Number(uid)) as
-    | User
-    | undefined;
+  const user = await one<User>("SELECT * FROM users WHERE id = $1", [Number(uid)]);
   return user ?? null;
 }

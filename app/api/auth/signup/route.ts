@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { one } from "@/lib/db";
 import { hashPassword, createSession } from "@/lib/auth";
 
 export async function POST(req: Request) {
@@ -9,13 +9,14 @@ export async function POST(req: Request) {
   if (typeof password !== "string" || password.length < 8) {
     return Response.json({ error: "Password must be at least 8 characters." }, { status: 400 });
   }
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email.toLowerCase());
+  const existing = await one("SELECT id FROM users WHERE email = $1", [email.toLowerCase()]);
   if (existing) {
     return Response.json({ error: "An account with this email already exists." }, { status: 409 });
   }
-  const result = db
-    .prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)")
-    .run(email.toLowerCase(), hashPassword(password));
-  await createSession(Number(result.lastInsertRowid));
+  const row = await one<{ id: number }>(
+    "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
+    [email.toLowerCase(), hashPassword(password)]
+  );
+  await createSession(Number(row!.id));
   return Response.json({ ok: true });
 }

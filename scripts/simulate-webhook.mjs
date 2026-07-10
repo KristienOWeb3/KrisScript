@@ -1,18 +1,21 @@
 /**
- * Simulates a SubScript `payment.succeeded` webhook against the local server.
+ * Simulates a SubScript `payment.succeeded` webhook against the app.
  *
  * Usage:
- *   node scripts/simulate-webhook.mjs              # latest PENDING payment
- *   node scripts/simulate-webhook.mjs <intent_id>  # specific intent
+ *   node scripts/simulate-webhook.mjs <intent_id> [app_url]
+ *
+ * The intent_id is returned by POST /api/billing/checkout (and shown in the
+ * dev checkout URL, e.g. /dev/checkout?intent=<intent_id>).
  *
  * Signs the payload with SUBSCRIPT_WEBHOOK_SECRET from .env.local (or the
  * built-in dev secret), matching SubScript's documented signature scheme:
  *   x-subscript-signature: t=<unix>,v1=HMAC_SHA256(secret, `${t}.${rawBody}`)
+ *
+ * Fulfillment looks the payment up by intent_id, so no other fields are needed.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
 
 const root = process.cwd();
 
@@ -33,16 +36,12 @@ function loadEnv(file) {
 
 const env = { ...loadEnv(".env"), ...loadEnv(".env.local"), ...process.env };
 const secret = env.SUBSCRIPT_WEBHOOK_SECRET || "dev-webhook-secret";
-const appUrl = (env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
 
-const db = new Database(path.join(root, "data", "app.db"));
-const arg = process.argv[2];
-const payment = arg
-  ? db.prepare("SELECT * FROM payments WHERE intent_id = ?").get(arg)
-  : db.prepare("SELECT * FROM payments WHERE status = 'PENDING' ORDER BY created_at DESC").get();
+const intentId = process.argv[2];
+const appUrl = (process.argv[3] || env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
 
-if (!payment) {
-  console.error(arg ? `No payment found for intent ${arg}` : "No PENDING payments found.");
+if (!intentId) {
+  console.error("Usage: node scripts/simulate-webhook.mjs <intent_id> [app_url]");
   process.exit(1);
 }
 
@@ -51,11 +50,8 @@ const event = {
   type: "payment.succeeded",
   created: Math.floor(Date.now() / 1000),
   data: {
-    intent_id: payment.intent_id,
-    merchant_reference: `${payment.product}:${payment.user_id}:${payment.id}`,
-    amount_usdc_micros: payment.amount_micros,
+    intent_id: intentId,
     currency: "USDC",
-    receipt_id: payment.receipt_token,
     transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
     chain_id: 5042002,
   },
@@ -74,5 +70,5 @@ const res = await fetch(`${appUrl}/api/webhooks/subscript`, {
   body: rawBody,
 });
 
-console.log(`Simulated ${event.type} for intent ${payment.intent_id} (${payment.product})`);
+console.log(`Simulated ${event.type} for intent ${intentId} -> ${appUrl}`);
 console.log(`Webhook response: HTTP ${res.status}`, await res.json());

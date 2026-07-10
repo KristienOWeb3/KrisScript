@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { q } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 
 export async function POST(req: Request) {
@@ -17,12 +17,12 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    db.prepare("UPDATE users SET payg_enabled = 1, wallet_address = ? WHERE id = ?").run(
+    await q("UPDATE users SET payg_enabled = 1, wallet_address = $1 WHERE id = $2", [
       walletAddress,
-      user.id
-    );
+      user.id,
+    ]);
   } else {
-    db.prepare("UPDATE users SET payg_enabled = 0 WHERE id = ?").run(user.id);
+    await q("UPDATE users SET payg_enabled = 0 WHERE id = $1", [user.id]);
   }
   return Response.json({ ok: true });
 }

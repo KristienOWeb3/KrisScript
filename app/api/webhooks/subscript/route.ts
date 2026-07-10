@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { q } from "@/lib/db";
 import { verifyWebhookSignature } from "@/lib/subscript";
 import { fulfillPayment } from "@/lib/billing";
 
@@ -26,16 +26,17 @@ export async function POST(req: Request) {
   }
 
   // Atomic claim: duplicate deliveries are acknowledged but not re-fulfilled.
-  const claim = db
-    .prepare("INSERT OR IGNORE INTO webhook_events (id) VALUES (?)")
-    .run(event.id);
-  if (claim.changes === 0) {
+  const claim = await q(
+    "INSERT INTO webhook_events (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
+    [event.id]
+  );
+  if (claim.rowCount === 0) {
     return Response.json({ received: true, duplicate: true });
   }
 
   // "payment.success" is SubScript's documented legacy alias.
   if (event.type === "payment.succeeded" || event.type === "payment.success") {
-    const result = fulfillPayment(event.data?.intent_id, event.data?.merchant_reference);
+    const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference);
     if (!result.ok) {
       console.warn("[webhook] payment.succeeded for unknown payment", event.data);
     }

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import db from "@/lib/db";
+import { q } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { createIntent, SubScriptError } from "@/lib/subscript";
 import { PRODUCTS, type ProductKey } from "@/lib/plans";
@@ -23,9 +23,10 @@ export async function POST(req: Request) {
   // One payments row per logical checkout; its id doubles as the SubScript
   // idempotencyKey so a retried request replays the same intent.
   const paymentId = crypto.randomUUID();
-  db.prepare(
-    "INSERT INTO payments (id, user_id, product, amount_micros) VALUES (?, ?, ?, ?)"
-  ).run(paymentId, user.id, product, spec.amountUsdcMicros);
+  await q(
+    "INSERT INTO payments (id, user_id, product, amount_micros) VALUES ($1, $2, $3, $4)",
+    [paymentId, user.id, product, spec.amountUsdcMicros]
+  );
 
   try {
     const result = await createIntent({
@@ -35,11 +36,11 @@ export async function POST(req: Request) {
       externalReference: `${product}:${user.id}:${paymentId}`,
       idempotencyKey: paymentId,
     });
-    db.prepare("UPDATE payments SET intent_id = ?, receipt_token = ? WHERE id = ?").run(
+    await q("UPDATE payments SET intent_id = $1, receipt_token = $2 WHERE id = $3", [
       result.intent.id,
       result.intent.receiptToken,
-      paymentId
-    );
+      paymentId,
+    ]);
     return Response.json({
       checkoutUrl: result.intent.checkoutUrl,
       intentId: result.intent.id,
@@ -47,13 +48,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     const e = err as SubScriptError;
-    db.prepare("UPDATE payments SET status = 'FAILED' WHERE id = ?").run(paymentId);
+    await q("UPDATE payments SET status = 'FAILED' WHERE id = $1", [paymentId]);
     return Response.json(
-      {
-        error: e.message,
-        code: e.code,
-        requestId: e.requestId,
-      },
+      { error: e.message, code: e.code, requestId: e.requestId },
       { status: 502 }
     );
   }

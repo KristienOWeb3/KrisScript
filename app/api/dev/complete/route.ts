@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import db from "@/lib/db";
+import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { hasRealKey, signWebhook } from "@/lib/subscript";
 import type { Payment } from "@/lib/billing";
@@ -18,9 +18,10 @@ export async function POST(req: Request) {
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
 
   const { intentId } = (await req.json().catch(() => ({}))) as { intentId?: string };
-  const payment = db
-    .prepare("SELECT * FROM payments WHERE intent_id = ? AND user_id = ?")
-    .get(intentId, user.id) as Payment | undefined;
+  const payment = await one<Payment>(
+    "SELECT * FROM payments WHERE intent_id = $1 AND user_id = $2",
+    [intentId, user.id]
+  );
   if (!payment) return Response.json({ error: "Unknown intent." }, { status: 404 });
 
   const event = {

@@ -12,7 +12,10 @@ export function webhookSecret(): string {
 }
 
 export function appUrl(): string {
-  return (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const url =
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  return url.replace(/\/$/, "");
 }
 
 export class SubScriptError extends Error {

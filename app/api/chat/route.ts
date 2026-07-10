@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { chatCompletion } from "@/lib/deepseek";
 import { hasRealKey, reportUsage } from "@/lib/subscript";
@@ -12,11 +12,10 @@ import {
 export async function GET() {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
-  const messages = db
-    .prepare(
-      "SELECT role, content, billed, created_at FROM messages WHERE user_id = ? ORDER BY id ASC LIMIT 200"
-    )
-    .all(user.id);
+  const { rows: messages } = await q(
+    "SELECT role, content, billed, created_at FROM messages WHERE user_id = $1 ORDER BY id ASC LIMIT 200",
+    [user.id]
+  );
   return Response.json({ messages });
 }
 
@@ -44,14 +43,11 @@ export async function POST(req: Request) {
   if (planActive) {
     if (user.plan === "pro") {
       const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
-      const today = (
-        db
-          .prepare(
-            "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND role = 'user' AND billed = 'plan' AND created_at >= ?"
-          )
-          .get(user.id, startOfDay) as { c: number }
-      ).c;
-      if (today >= PRO_DAILY_CAP) {
+      const today = await one<{ c: number }>(
+        "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND billed = 'plan' AND created_at >= $2",
+        [user.id, startOfDay]
+      );
+      if ((today?.c ?? 0) >= PRO_DAILY_CAP) {
         return Response.json(
           {
             error: `Pro daily limit reached (${PRO_DAILY_CAP} messages). Upgrade to Pro Max for unlimited.`,
@@ -76,10 +72,10 @@ export async function POST(req: Request) {
           { status: 402 }
         );
       }
-      db.prepare("UPDATE users SET payg_accrued = ? WHERE id = ?").run(
+      await q("UPDATE users SET payg_accrued = $1 WHERE id = $2", [
         accrued.toFixed(2),
-        user.id
-      );
+        user.id,
+      ]);
     } else {
       const usage = await reportUsage(user.wallet_address, PAYG_PRICE_USDC);
       if (usage.status === 402) {
@@ -98,21 +94,18 @@ export async function POST(req: Request) {
           { status: 502 }
         );
       }
-      db.prepare("UPDATE users SET payg_accrued = ? WHERE id = ?").run(
+      await q("UPDATE users SET payg_accrued = $1 WHERE id = $2", [
         String(usage.body?.accruedUsageUsdc ?? user.payg_accrued),
-        user.id
-      );
+        user.id,
+      ]);
     }
     billed = "payg";
   } else {
-    const freeUsed = (
-      db
-        .prepare(
-          "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND role = 'user' AND billed = 'free'"
-        )
-        .get(user.id) as { c: number }
-    ).c;
-    if (freeUsed >= FREE_MESSAGE_CAP) {
+    const freeUsed = await one<{ c: number }>(
+      "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND billed = 'free'",
+      [user.id]
+    );
+    if ((freeUsed?.c ?? 0) >= FREE_MESSAGE_CAP) {
       return Response.json(
         {
           error: `Free limit reached (${FREE_MESSAGE_CAP} messages). Upgrade to Pro, Pro Max, or enable pay-as-you-chat.`,
@@ -124,18 +117,17 @@ export async function POST(req: Request) {
     billed = "free";
   }
 
-  db.prepare("INSERT INTO messages (user_id, role, content, billed) VALUES (?, 'user', ?, ?)").run(
+  await q("INSERT INTO messages (user_id, role, content, billed) VALUES ($1, 'user', $2, $3)", [
     user.id,
     message.trim(),
-    billed
-  );
+    billed,
+  ]);
 
-  const history = db
-    .prepare(
-      "SELECT role, content FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT 20"
-    )
-    .all(user.id)
-    .reverse() as { role: "user" | "assistant"; content: string }[];
+  const { rows: recent } = await q(
+    "SELECT role, content FROM messages WHERE user_id = $1 ORDER BY id DESC LIMIT 20",
+    [user.id]
+  );
+  const history = recent.reverse() as { role: "user" | "assistant"; content: string }[];
 
   let reply: string;
   try {
@@ -144,9 +136,10 @@ export async function POST(req: Request) {
     reply = `Sorry — the AI backend returned an error: ${(err as Error).message}`;
   }
 
-  db.prepare(
-    "INSERT INTO messages (user_id, role, content, billed) VALUES (?, 'assistant', ?, NULL)"
-  ).run(user.id, reply);
+  await q(
+    "INSERT INTO messages (user_id, role, content, billed) VALUES ($1, 'assistant', $2, NULL)",
+    [user.id, reply]
+  );
 
   return Response.json({ reply, billed });
 }

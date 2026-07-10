@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { one } from "@/lib/db";
 import { verifyPassword, createSession, type User } from "@/lib/auth";
 
 export async function POST(req: Request) {
@@ -6,9 +6,7 @@ export async function POST(req: Request) {
   if (typeof email !== "string" || typeof password !== "string") {
     return Response.json({ error: "Email and password are required." }, { status: 400 });
   }
-  const user = db
-    .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.toLowerCase()) as User | undefined;
+  const user = await one<User>("SELECT * FROM users WHERE email = $1", [email.toLowerCase()]);
   if (!user || !verifyPassword(password, user.password_hash)) {
     return Response.json({ error: "Invalid email or password." }, { status: 401 });
   }
