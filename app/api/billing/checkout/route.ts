@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { q } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { createIntent, SubScriptError } from "@/lib/subscript";
+import { createIntent, createSubscription, SubScriptError } from "@/lib/subscript";
 import { PRODUCTS, type ProductKey } from "@/lib/plans";
 
 export async function POST(req: Request) {
@@ -21,19 +21,50 @@ export async function POST(req: Request) {
 
   const spec = PRODUCTS[product];
   // One payments row per logical checkout; its id doubles as the SubScript
-  // idempotencyKey so a retried request replays the same intent.
+  // idempotencyKey so a retried request replays the same checkout/subscription.
   const paymentId = crypto.randomUUID();
   await q(
     "INSERT INTO payments (id, user_id, product, amount_micros) VALUES ($1, $2, $3, $4)",
     [paymentId, user.id, product, spec.amountUsdcMicros]
   );
+  const externalReference = `${product}:${user.id}:${paymentId}`;
 
   try {
+    if (spec.kind === "subscription") {
+      // Pro / Pro Max are real recurring subscriptions on SubScript.
+      const result = await createSubscription({
+        title: spec.title,
+        description: spec.description,
+        amountUsdcMicros: spec.amountUsdcMicros,
+        interval: (spec as { interval: string }).interval,
+        externalReference,
+        idempotencyKey: paymentId,
+      });
+      await q("UPDATE payments SET intent_id = $1 WHERE id = $2", [
+        result.subscription.id,
+        paymentId,
+      ]);
+      // Record the subscription id on the user immediately so cancel works
+      // even before the first webhook lands.
+      await q("UPDATE users SET subscription_id = $1, sub_status = $2 WHERE id = $3", [
+        result.subscription.id,
+        result.subscription.status,
+        user.id,
+      ]);
+      return Response.json({
+        checkoutUrl: result.subscription.checkoutUrl,
+        intentId: result.subscription.id,
+        subscription: true,
+        devMode: result.devMode,
+      });
+    }
+
+    // One-time checkout (the $1 activation fee).
     const result = await createIntent({
       title: spec.title,
       description: spec.description,
       amountUsdcMicros: spec.amountUsdcMicros,
-      externalReference: `${product}:${user.id}:${paymentId}`,
+      externalReference,
       idempotencyKey: paymentId,
     });
     await q("UPDATE payments SET intent_id = $1, receipt_token = $2 WHERE id = $3", [
@@ -44,6 +75,7 @@ export async function POST(req: Request) {
     return Response.json({
       checkoutUrl: result.intent.checkoutUrl,
       intentId: result.intent.id,
+      subscription: false,
       devMode: result.devMode,
     });
   } catch (err) {

@@ -106,6 +106,97 @@ export async function createIntent(opts: {
   };
 }
 
+export type SubscriptionResult = {
+  devMode: boolean;
+  subscription: {
+    id: string;
+    checkoutUrl: string;
+    status: string;
+  };
+};
+
+/**
+ * Create a real recurring subscription (POST /api/v1/subscriptions).
+ * SubScript charges `amountUsdcMicros` every `interval` automatically and
+ * emits subscription.created / subscription.renewed webhooks. The returned
+ * subscription is a first-class object on the merchant's dashboard.
+ * In dev mode (no key) it routes to the local simulated checkout.
+ */
+export async function createSubscription(opts: {
+  title: string;
+  description?: string;
+  amountUsdcMicros: string;
+  interval: string;
+  externalReference: string;
+  idempotencyKey: string;
+}): Promise<SubscriptionResult> {
+  if (!hasRealKey()) {
+    const id = `dev_sub_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    return {
+      devMode: true,
+      subscription: {
+        id,
+        checkoutUrl: `${appUrl()}/dev/checkout?intent=${id}`,
+        status: "incomplete",
+      },
+    };
+  }
+
+  const key = process.env.SUBSCRIPT_SECRET_KEY!;
+  const body: Record<string, unknown> = {
+    title: opts.title,
+    description: opts.description,
+    amountUsdcMicros: opts.amountUsdcMicros,
+    interval: opts.interval,
+    externalReference: opts.externalReference,
+    idempotencyKey: opts.idempotencyKey,
+    sandbox: !key.startsWith("sk_live_"),
+  };
+  if (appUrl().startsWith("https://")) {
+    body.successUrl = `${appUrl()}/billing/success`;
+    body.cancelUrl = `${appUrl()}/billing/cancel`;
+  }
+
+  const res = await fetch(`${BASE}/api/v1/subscriptions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({} as any));
+  if (!res.ok || !json.subscription) {
+    throw new SubScriptError(
+      json.message ||
+        json.error ||
+        `SubScript /api/v1/subscriptions failed (HTTP ${res.status})`,
+      { code: json.code, requestId: json.request_id, status: res.status }
+    );
+  }
+  return {
+    devMode: false,
+    subscription: {
+      id: json.subscription.id,
+      checkoutUrl: json.subscription.checkoutUrl,
+      status: json.subscription.status,
+    },
+  };
+}
+
+/** Cancel a subscription (DELETE /api/v1/subscriptions?id=). */
+export async function cancelSubscription(
+  id: string
+): Promise<{ status: number; body: any }> {
+  if (!hasRealKey()) return { status: 200, body: { id, status: "canceled", devMode: true } };
+  const res = await fetch(`${BASE}/api/v1/subscriptions?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+  });
+  const body = await res.json().catch(() => ({}));
+  return { status: res.status, body };
+}
+
 /**
  * Report metered usage against a customer's vault
  * (POST /api/user/vault/report-usage). Returns HTTP status + parsed body;

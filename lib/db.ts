@@ -14,8 +14,15 @@ CREATE TABLE IF NOT EXISTS users (
   payg_enabled INTEGER NOT NULL DEFAULT 0,
   wallet_address TEXT,
   payg_accrued TEXT NOT NULL DEFAULT '0',
+  subscription_id TEXT,
+  sub_status TEXT,
+  sub_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL DEFAULT (floor(extract(epoch from now()))::integer)
 );
+-- Additive migrations for databases created before subscriptions existed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_status TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_cancel_at_period_end INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL,

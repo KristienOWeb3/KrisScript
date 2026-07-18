@@ -24,20 +24,38 @@ export async function POST(req: Request) {
   );
   if (!payment) return Response.json({ error: "Unknown intent." }, { status: 404 });
 
-  const event = {
-    id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-    type: "payment.succeeded",
-    created: Math.floor(Date.now() / 1000),
-    data: {
-      intent_id: payment.intent_id,
-      merchant_reference: `${payment.product}:${payment.user_id}:${payment.id}`,
-      amount_usdc_micros: payment.amount_micros,
-      currency: "USDC",
-      receipt_id: payment.receipt_token,
-      transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
-      chain_id: 5042002,
-    },
-  };
+  const isSubscription = payment.product === "pro" || payment.product === "promax";
+  const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
+  const event = isSubscription
+    ? {
+        id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+        type: "subscription.created",
+        created: Math.floor(Date.now() / 1000),
+        data: {
+          subscription_id: payment.intent_id,
+          status: "active",
+          external_reference: externalReference,
+          amount_usdc_micros: payment.amount_micros,
+          currency: "USDC",
+          transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
+          chain_id: 5042002,
+          simulated: true,
+        },
+      }
+    : {
+        id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+        type: "payment.succeeded",
+        created: Math.floor(Date.now() / 1000),
+        data: {
+          intent_id: payment.intent_id,
+          merchant_reference: externalReference,
+          amount_usdc_micros: payment.amount_micros,
+          currency: "USDC",
+          receipt_id: payment.receipt_token,
+          transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
+          chain_id: 5042002,
+        },
+      };
   const rawBody = JSON.stringify(event);
   const origin = new URL(req.url).origin;
   const res = await fetch(`${origin}/api/webhooks/subscript`, {

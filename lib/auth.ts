@@ -15,6 +15,9 @@ export type User = {
   payg_enabled: number;
   wallet_address: string | null;
   payg_accrued: string;
+  subscription_id: string | null;
+  sub_status: string | null;
+  sub_cancel_at_period_end: number;
   created_at: number;
 };
 

@@ -5,7 +5,7 @@ An AI chat platform (DeepSeek-powered) built to **field-test the [SubScript](htt
 | SubScript claim | How Kris's Script tests it |
 |---|---|
 | One-time payments | $1 account-activation fee at signup (hosted checkout intent) |
-| Subscription billing | Pro ($2/week) and Pro Max ($5/week) plans |
+| Subscription billing | Pro ($2/week) and Pro Max ($5/week) recurring subscriptions |
 | Payment for service (metered) | "Pay as you chat" — $0.10 per message via vault `report-usage` |
 
 Free users (including those who paid the $1 fee) get **3 messages total**, then must upgrade or enable pay-as-you-chat.
@@ -65,7 +65,7 @@ The script signs the payload exactly per SubScript's documented scheme (`t=<unix
 - Webhook events are **claimed atomically** (unique insert on `event.id`) so replays are acknowledged but never re-fulfilled; payments are also idempotent at the row level (verified: delivering the same payment twice does not double-extend a plan).
 - Billing precedence per message: **active weekly plan → pay-as-you-chat → free cap (3)**.
 - Pro = 100 messages/day; Pro Max = unlimited; renewing the same plan extends the period, switching plans starts a fresh 7 days.
-- SubScript has **no live fixed-schedule subscription API yet** (docs: "planned but not yet live"), so weekly plans are implemented as one-time checkout intents granting 7-day access — see [GRADING.md](GRADING.md).
+- Pro / Pro Max are **real recurring subscriptions** via `POST /api/v1/subscriptions` (weekly interval). SubScript re-charges automatically and fires `subscription.renewed`, which extends access another period; `subscription.canceled` sets cancel-at-period-end. They appear as subscription objects on the SubScript merchant dashboard. The $1 activation stays a one-time checkout intent. See [GRADING.md](GRADING.md).
 
 ## Project map
 

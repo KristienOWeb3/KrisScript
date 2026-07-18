@@ -1,6 +1,6 @@
 import { q } from "@/lib/db";
 import { verifyWebhookSignature } from "@/lib/subscript";
-import { fulfillPayment } from "@/lib/billing";
+import { fulfillPayment, handleSubscriptionEvent } from "@/lib/billing";
 
 /**
  * SubScript webhook receiver.
@@ -39,6 +39,11 @@ export async function POST(req: Request) {
     const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference);
     if (!result.ok) {
       console.warn("[webhook] payment.succeeded for unknown payment", event.data);
+    }
+  } else if (typeof event.type === "string" && event.type.startsWith("subscription.")) {
+    const result = await handleSubscriptionEvent(event.type, event.data ?? {});
+    if (!result.ok) {
+      console.warn(`[webhook] ${event.type} for unknown subscription`, event.data);
     }
   }
 

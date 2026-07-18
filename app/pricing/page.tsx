@@ -21,7 +21,7 @@ export default function PricingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function buy(product: "pro" | "promax") {
+  async function subscribe(product: "pro" | "promax") {
     setBusy(product);
     setError("");
     const res = await fetch("/api/billing/checkout", {
@@ -36,6 +36,16 @@ export default function PricingPage() {
       return;
     }
     window.location.href = data.checkoutUrl;
+  }
+
+  async function cancelSub() {
+    setBusy("cancel");
+    setError("");
+    const res = await fetch("/api/billing/cancel-subscription", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) setError(data.error);
+    setBusy("");
+    load();
   }
 
   async function setPayg(enabled: boolean) {
@@ -53,6 +63,14 @@ export default function PricingPage() {
   }
 
   const user = me?.user;
+  const activeSub = (p: string) =>
+    user?.plan === p && (user?.subStatus === "active" || user?.planExpiresAt);
+
+  function planButtonLabel(p: "pro" | "promax", price: string) {
+    if (busy === p) return "Creating subscription…";
+    if (activeSub(p)) return "Subscribed ✓";
+    return `Subscribe — ${price}`;
+  }
 
   return (
     <div className="container">
@@ -65,16 +83,27 @@ export default function PricingPage() {
         </a>
       </div>
       <p className="subtitle" style={{ marginTop: 6 }}>
-        All payments settle in USDC on Arc via SubScript.{" "}
+        Pro plans are recurring USDC subscriptions on Arc via SubScript.{" "}
         {me?.devMode && <span className="badge dev">DEV MODE — simulated checkout</span>}
       </p>
       {user && (
         <p className="muted">
           Current plan:{" "}
           <strong>{user.plan === "promax" ? "Pro Max" : user.plan === "pro" ? "Pro" : "Free"}</strong>
+          {user.subStatus && user.plan !== "free" && (
+            <> — subscription <strong>{user.subStatus}</strong></>
+          )}
           {user.planExpiresAt &&
-            ` — renews/expires ${new Date(user.planExpiresAt * 1000).toLocaleString()}`}
+            ` — ${user.subCancelAtPeriodEnd ? "ends" : "renews"} ${new Date(
+              user.planExpiresAt * 1000
+            ).toLocaleString()}`}
         </p>
+      )}
+      {user && user.subCancelAtPeriodEnd && user.plan !== "free" && (
+        <div className="notice-box">
+          Subscription set to cancel — you keep access until the current period ends, then drop to
+          Free. Re-subscribe anytime.
+        </div>
       )}
       {error && <div className="error-box">{error}</div>}
 
@@ -96,34 +125,38 @@ export default function PricingPage() {
         <div className="plan-card">
           <h3>Pro</h3>
           <div className="price">
-            $2 <small>/ week</small>
+            $2 <small>/ week recurring</small>
           </div>
           <ul>
             <li>100 messages per day</li>
-            <li>7-day access per purchase</li>
-            <li>One-time USDC checkout</li>
+            <li>Auto-renews weekly in USDC</li>
+            <li>Cancel anytime</li>
           </ul>
-          <button className="btn" onClick={() => buy("pro")} disabled={busy !== ""}>
-            {busy === "pro" ? "Creating checkout…" : user?.plan === "pro" ? "Extend 1 week — $2" : "Get Pro — $2"}
+          <button
+            className="btn"
+            onClick={() => subscribe("pro")}
+            disabled={busy !== "" || activeSub("pro")}
+          >
+            {planButtonLabel("pro", "$2/wk")}
           </button>
         </div>
 
         <div className="plan-card featured">
           <h3>Pro Max</h3>
           <div className="price">
-            $5 <small>/ week</small>
+            $5 <small>/ week recurring</small>
           </div>
           <ul>
             <li>Unlimited messages</li>
-            <li>7-day access per purchase</li>
-            <li>One-time USDC checkout</li>
+            <li>Auto-renews weekly in USDC</li>
+            <li>Cancel anytime</li>
           </ul>
-          <button className="btn" onClick={() => buy("promax")} disabled={busy !== ""}>
-            {busy === "promax"
-              ? "Creating checkout…"
-              : user?.plan === "promax"
-                ? "Extend 1 week — $5"
-                : "Get Pro Max — $5"}
+          <button
+            className="btn"
+            onClick={() => subscribe("promax")}
+            disabled={busy !== "" || activeSub("promax")}
+          >
+            {planButtonLabel("promax", "$5/wk")}
           </button>
         </div>
 
@@ -137,7 +170,7 @@ export default function PricingPage() {
           <ul>
             <li>SubScript metered vault billing</li>
             <li>Charged per message via report-usage</li>
-            <li>Used only when no weekly plan is active</li>
+            <li>Used only when no plan is active</li>
           </ul>
           <label>Your Arc wallet address (vault owner)</label>
           <input
@@ -166,6 +199,19 @@ export default function PricingPage() {
           )}
         </div>
       </div>
+
+      {user && user.plan !== "free" && user.subscriptionId && !user.subCancelAtPeriodEnd && (
+        <div style={{ marginTop: 24 }}>
+          <button
+            className="btn secondary"
+            style={{ maxWidth: 260 }}
+            onClick={cancelSub}
+            disabled={busy !== ""}
+          >
+            {busy === "cancel" ? "Cancelling…" : "Cancel subscription"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

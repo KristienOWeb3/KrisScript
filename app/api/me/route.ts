@@ -34,6 +34,9 @@ export async function GET() {
       paygEnabled: !!user.payg_enabled,
       walletAddress: user.wallet_address,
       paygAccrued: user.payg_accrued,
+      subscriptionId: user.subscription_id,
+      subStatus: user.sub_status,
+      subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
     },
     devMode: !hasRealKey(),
   });
