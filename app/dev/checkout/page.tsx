@@ -30,21 +30,21 @@ function DevCheckout() {
   return (
     <div className="center-page">
       <div className="card">
-        <span className="badge dev">SIMULATED CHECKOUT — DEV MODE</span>
+        <span className="badge dev">SIMULATED CHECKOUT - DEV MODE</span>
         <h1 className="brand" style={{ marginTop: 14 }}>
           SubScript <span>Checkout</span> (simulated)
         </h1>
         <p className="subtitle">
           No real SubScript key is configured, so this page stands in for the hosted checkout at{" "}
-          <code>subscriptonarc.com/pay/…</code>. Completing it sends a correctly signed{" "}
-          <code>payment.succeeded</code> webhook to your own endpoint — the same path a real
+          <code>subscriptonarc.com/pay/...</code>. Completing it sends a correctly signed{" "}
+          <code>payment.succeeded</code> webhook to your own endpoint - the same path a real
           payment takes.
         </p>
         <p className="muted">
           Intent: <code>{intentId}</code>
         </p>
         <button className="btn" onClick={complete} disabled={busy || !intentId}>
-          {busy ? "Delivering webhook…" : "Simulate successful USDC payment"}
+          {busy ? "Delivering webhook..." : "Simulate successful USDC payment"}
         </button>
         <a className="btn secondary" href="/billing/cancel">
           Cancel payment
@@ -57,7 +57,7 @@ function DevCheckout() {
 
 export default function DevCheckoutPage() {
   return (
-    <Suspense fallback={<div className="center-page muted">Loading…</div>}>
+    <Suspense fallback={<div className="center-page muted">Loading...</div>}>
       <DevCheckout />
     </Suspense>
   );

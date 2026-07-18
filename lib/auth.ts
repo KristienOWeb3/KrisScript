@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { one } from "./db";
 
 const SECRET = process.env.AUTH_SECRET || "kris-script-dev-secret";
-const SESSION_TTL = 30 * 86400;
+const SESSION_TTL = 365 * 86400;
 
 export type User = {
   id: number;
@@ -46,6 +46,7 @@ export async function createSession(userId: number) {
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_TTL,
+    secure: process.env.NODE_ENV === "production",
   });
 }
 

@@ -30,28 +30,52 @@ export default function LoginPage() {
 
   return (
     <div className="center-page">
-      <form className="card" onSubmit={submit}>
-        <h1 className="brand">
-          Kris&apos;s <span>Script</span>
-        </h1>
-        <p className="subtitle">Welcome back.</p>
-        <label>Email</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <label>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <div className="error-box">{error}</div>}
-        <button className="btn" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-        <p className="muted mt">
-          New here? <a href="/signup">Create an account</a>
-        </p>
-      </form>
+      <div className="auth-grid">
+        <section className="auth-copy">
+          <div>
+            <div className="rail-brand">
+              <div className="mark">KS</div>
+              <div className="brand-copy">
+                <div className="brand-title">Kris&apos;s Script</div>
+                <div className="brand-meta">Return to the workspace</div>
+              </div>
+            </div>
+            <h1 className="hero-title" style={{ marginTop: 54 }}>Pick up the run.</h1>
+            <p className="subtitle">
+              Continue validating activation fees, recurring subscription events, and metered
+              chat billing from a single compact workspace.
+            </p>
+          </div>
+          <div className="auth-preview">
+            <div className="terminal-line">session - authenticated</div>
+            <div className="terminal-line">plan - synced from webhook state</div>
+            <div className="terminal-line">chat - ready</div>
+          </div>
+        </section>
+        <form className="card" onSubmit={submit}>
+          <span className="badge free">SIGN IN</span>
+          <h1 className="brand" style={{ fontSize: "1.8rem", marginTop: 18 }}>
+            Welcome back
+          </h1>
+          <p className="subtitle">Enter your account details to reopen your chat workspace.</p>
+          <label>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <label>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          {error && <div className="error-box">{error}</div>}
+          <button className="btn" disabled={busy}>
+            {busy ? "Signing in..." : "Sign in"}
+          </button>
+          <p className="muted mt">
+            New here? <a href="/signup">Create an account</a>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

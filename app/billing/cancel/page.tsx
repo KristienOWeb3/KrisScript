@@ -2,8 +2,9 @@ export default function BillingCancelPage() {
   return (
     <div className="center-page">
       <div className="card">
-        <h1 className="brand">
-          Payment cancelled <span>🛑</span>
+        <span className="badge free">CHECKOUT</span>
+        <h1 className="brand" style={{ fontSize: "1.85rem", marginTop: 16 }}>
+          Payment cancelled
         </h1>
         <p className="subtitle">No USDC was charged. You can retry whenever you&apos;re ready.</p>
         <a className="btn" href="/pricing">

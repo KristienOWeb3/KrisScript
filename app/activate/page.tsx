@@ -52,8 +52,9 @@ export default function ActivatePage() {
   return (
     <div className="center-page">
       <div className="card">
-        <h1 className="brand">
-          One last step <span>💸</span>
+        <span className="badge pro">ACTIVATION</span>
+        <h1 className="brand" style={{ fontSize: "1.85rem", marginTop: 16 }}>
+          One last step
         </h1>
         <p className="subtitle">
           Kris&apos;s Script charges a one-time <strong>$1 USDC</strong> activation fee, settled
@@ -61,17 +62,17 @@ export default function ActivatePage() {
         </p>
         {devMode && (
           <div className="notice-box">
-            <strong>Dev mode:</strong> no SubScript API key configured — checkout is simulated
+            <strong>Dev mode:</strong> no SubScript API key configured - checkout is simulated
             locally so you can test the full flow.
           </div>
         )}
         <button className="btn" onClick={pay} disabled={busy}>
-          {busy ? (waiting ? "Redirecting to checkout…" : "Creating checkout…") : "Pay $1 & activate"}
+          {busy ? (waiting ? "Redirecting to checkout..." : "Creating checkout...") : "Pay $1 and activate"}
         </button>
         {error && <div className="error-box">{error}</div>}
         <p className="muted mt">
           After paying you&apos;ll be activated automatically once SubScript&apos;s{" "}
-          <code>payment.succeeded</code> webhook is verified — never from the redirect alone.
+          <code>payment.succeeded</code> webhook is verified - never from the redirect alone.
         </p>
       </div>
     </div>

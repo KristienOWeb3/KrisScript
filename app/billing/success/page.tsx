@@ -24,11 +24,12 @@ export default function BillingSuccessPage() {
   return (
     <div className="center-page">
       <div className="card">
-        <h1 className="brand">
-          Payment received <span>✅</span>
+        <span className="badge pro">PAYMENT STATUS</span>
+        <h1 className="brand" style={{ fontSize: "1.85rem", marginTop: 16 }}>
+          Payment received
         </h1>
         <p className="subtitle">
-          Reminder: the redirect is not proof of payment — access unlocks only after the verified{" "}
+          Reminder: the redirect is not proof of payment - access unlocks only after the verified{" "}
           <code>payment.succeeded</code> webhook is processed.
         </p>
         {user ? (
@@ -37,7 +38,7 @@ export default function BillingSuccessPage() {
               Account: <strong>{user.email}</strong>
             </div>
             <div>
-              Activated: <strong>{user.activated ? "yes ✅" : "waiting for webhook…"}</strong>
+              Activated: <strong>{user.activated ? "yes" : "waiting for webhook..."}</strong>
             </div>
             <div>
               Plan:{" "}
