@@ -1,0 +1,32 @@
+   ▲ Next.js 15.5.20
+   - Local:        http://127.0.0.1:3012
+   - Network:      http://127.0.0.1:3012
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 5.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 2.8s (532 modules)
+ GET / 200 in 4453ms
+ GET / 200 in 487ms
+ ○ Compiling /api/me ...
+ ✓ Compiled /api/me in 1096ms (552 modules)
+ GET /api/me 200 in 1434ms
+ ✓ Compiled in 622ms (552 modules)
+ ○ Compiling /signup ...
+ ✓ Compiled /signup in 1241ms (559 modules)
+ GET /signup 200 in 2391ms
+ ✓ Compiled in 297ms (319 modules)
+   Reload env: .env.local
+ ✓ Compiled in 966ms (540 modules)
+ GET /signup 200 in 572ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 2s (887 modules)
+ GET /signup 500 in 5968ms
+ GET /signup 500 in 3035ms
+ ✓ Compiled in 3.6s (887 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1703ms (892 modules)
+ GET /signup 404 in 3219ms
+   Reload env: .env.local
+ ✓ Compiled in 9.1s (887 modules)

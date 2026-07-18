@@ -1,0 +1,25 @@
+ ⨯ [TypeError: a[d] is not a function] { digest: '400745943' }
+[TypeError: a[d] is not a function]
+ ⨯ [TypeError: a[d] is not a function]
+ ⨯ [TypeError: a[d] is not a function] { page: '/signup' }
+ ⨯ Error: Cannot find module './873.js'
+Require stack:
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\.next\server\webpack-runtime.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\.next\server\pages\_document.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\server\require.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\server\load-components.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\build\utils.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\build\swc\options.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\build\swc\index.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\build\analysis\parse-module.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\build\analysis\get-page-static-info.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\Kristien\OneDrive\Desktop\Kris's Script\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (C:\Users\Kristien\OneDrive\Desktop\Kris's Script\.next\server\app\signup\page.js:2:10075)
+    at Object.<anonymous> (C:\Users\Kristien\OneDrive\Desktop\Kris's Script\.next\server\app\signup\page.js:2:10124) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/signup'
+}
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
