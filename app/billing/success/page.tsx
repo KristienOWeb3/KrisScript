@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export default function BillingSuccessPage() {
   const [me, setMe] = useState<any>(null);
   const [ticks, setTicks] = useState(0);
+  const [returnSync, setReturnSync] = useState<{ status: string; message: string } | null>(null);
 
   useEffect(() => {
     const load = () =>
@@ -17,6 +18,49 @@ export default function BillingSuccessPage() {
       load();
     }, 3000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("subscript_status");
+    const checkoutId = params.get("subscript_checkout_id");
+    const receiptId = params.get("subscript_receipt_id");
+    const txHash = params.get("subscript_tx_hash");
+    if (status !== "success" || !checkoutId || !receiptId || !txHash) return;
+
+    let cancelled = false;
+    fetch("/api/billing/confirm-return", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, checkoutId, receiptId, txHash }),
+    })
+      .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        if (cancelled) return;
+        if (ok && body.confirmed) {
+          setReturnSync({
+            status: "confirmed",
+            message:
+              "SubScript return matched your pending checkout. Access has been reconciled while the signed webhook is still expected for audit.",
+          });
+          fetch("/api/me")
+            .then((r) => r.json())
+            .then((d) => !cancelled && setMe(d));
+        } else if (body.reason !== "pending_payment_not_found") {
+          setReturnSync({
+            status: "waiting",
+            message: body.error || "Waiting for the signed SubScript webhook.",
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReturnSync({ status: "waiting", message: "Waiting for the signed SubScript webhook." });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const user = me?.user;
@@ -58,6 +102,11 @@ export default function BillingSuccessPage() {
           </div>
         ) : (
           <p className="muted">Checking account status{".".repeat((ticks % 3) + 1)}</p>
+        )}
+        {returnSync && (
+          <div className={returnSync.status === "confirmed" ? "notice-box" : "error-box"}>
+            {returnSync.message}
+          </div>
         )}
         {user?.pendingPayment && !user.activated && (
           <div className="error-box">
