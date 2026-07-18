@@ -43,8 +43,18 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 CREATE TABLE IF NOT EXISTS webhook_events (
   id TEXT PRIMARY KEY,
+  event_type TEXT,
+  raw_body TEXT,
+  processing_at INTEGER,
+  processed_at INTEGER,
+  error TEXT,
   received_at INTEGER NOT NULL DEFAULT (floor(extract(epoch from now()))::integer)
 );
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS event_type TEXT;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS raw_body TEXT;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS processing_at INTEGER;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS processed_at INTEGER;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS error TEXT;
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, role, billed);
 CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(intent_id);
 `;

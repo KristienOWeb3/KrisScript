@@ -25,26 +25,43 @@ export async function POST(req: Request) {
     return Response.json({ error: "Malformed event" }, { status: 400 });
   }
 
-  // Atomic claim: duplicate deliveries are acknowledged but not re-fulfilled.
+  await q(
+    "INSERT INTO webhook_events (id, event_type, raw_body) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
+    [event.id, event.type, rawBody]
+  );
+
+  const now = Math.floor(Date.now() / 1000);
   const claim = await q(
-    "INSERT INTO webhook_events (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
-    [event.id]
+    "UPDATE webhook_events SET processing_at = $2, error = NULL WHERE id = $1 AND processed_at IS NULL AND (processing_at IS NULL OR processing_at < $3)",
+    [event.id, now, now - 300]
   );
   if (claim.rowCount === 0) {
     return Response.json({ received: true, duplicate: true });
   }
 
-  // "payment.success" is SubScript's documented legacy alias.
-  if (event.type === "payment.succeeded" || event.type === "payment.success") {
-    const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference);
-    if (!result.ok) {
-      console.warn("[webhook] payment.succeeded for unknown payment", event.data);
+  try {
+    // "payment.success" is SubScript's documented legacy alias.
+    if (event.type === "payment.succeeded" || event.type === "payment.success") {
+      const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference);
+      if (!result.ok) {
+        console.warn("[webhook] payment.succeeded for unknown payment", event.data);
+      }
+    } else if (typeof event.type === "string" && event.type.startsWith("subscription.")) {
+      const result = await handleSubscriptionEvent(event.type, event.data ?? {});
+      if (!result.ok) {
+        console.warn(`[webhook] ${event.type} for unknown subscription`, event.data);
+      }
     }
-  } else if (typeof event.type === "string" && event.type.startsWith("subscription.")) {
-    const result = await handleSubscriptionEvent(event.type, event.data ?? {});
-    if (!result.ok) {
-      console.warn(`[webhook] ${event.type} for unknown subscription`, event.data);
-    }
+    await q(
+      "UPDATE webhook_events SET processed_at = $2, processing_at = NULL, error = NULL WHERE id = $1",
+      [event.id, Math.floor(Date.now() / 1000)]
+    );
+  } catch (err) {
+    await q(
+      "UPDATE webhook_events SET processing_at = NULL, error = $2 WHERE id = $1",
+      [event.id, (err as Error).message]
+    );
+    throw err;
   }
 
   return Response.json({ received: true });

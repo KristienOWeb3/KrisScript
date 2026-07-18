@@ -204,15 +204,17 @@ export async function cancelSubscription(
  */
 export async function reportUsage(
   userAddress: string,
-  amountUsdc: string
+  amountUsdcMicros: string,
+  requestId: string
 ): Promise<{ status: number; body: any }> {
   const res = await fetch(`${BASE}/api/user/vault/report-usage`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}`,
       "Content-Type": "application/json",
+      "x-request-id": requestId,
     },
-    body: JSON.stringify({ userAddress, amountUsdc }),
+    body: JSON.stringify({ userAddress, amountUsdcMicros }),
   });
   const body = await res.json().catch(() => ({}));
   return { status: res.status, body };
