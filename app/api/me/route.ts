@@ -20,6 +20,15 @@ export async function GET() {
     "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND created_at >= $2",
     [user.id, startOfDay]
   );
+  const pendingPayment = await one<{
+    id: string;
+    product: string;
+    intent_id: string | null;
+    created_at: number;
+  }>(
+    "SELECT id, product, intent_id, created_at FROM payments WHERE user_id = $1 AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1",
+    [user.id]
+  );
 
   return Response.json({
     user: {
@@ -37,6 +46,13 @@ export async function GET() {
       subscriptionId: user.subscription_id,
       subStatus: user.sub_status,
       subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
+      pendingPayment: pendingPayment
+        ? {
+            product: pendingPayment.product,
+            intentId: pendingPayment.intent_id,
+            createdAt: pendingPayment.created_at,
+          }
+        : null,
     },
     devMode: !hasRealKey(),
   });

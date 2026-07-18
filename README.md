@@ -13,7 +13,7 @@ Free users (including those who paid the $1 fee) get **3 messages total**, then 
 ## Stack
 
 - **Next.js 15** (App Router) + React 19
-- **Postgres** — real `DATABASE_URL` in production (Neon/Supabase/etc.); embedded Postgres ([PGlite](https://pglite.dev)) in `data/pglite` locally with zero setup
+- **Postgres** — required `DATABASE_URL` in production (Neon/Supabase/etc.); embedded Postgres ([PGlite](https://pglite.dev)) in `data/pglite` locally with zero setup
 - **DeepSeek** chat completions (`deepseek-chat`)
 - **SubScript** REST API — checkout intents, HMAC-signed webhooks, metered usage reporting. No SDK; plain `fetch`.
 
@@ -55,17 +55,17 @@ The script signs the payload exactly per SubScript's documented scheme (`t=<unix
 ## Deploying to Vercel
 
 1. Import the GitHub repo in Vercel (or deploy via CLI). The build needs no env vars.
-2. Add a Postgres database: Vercel Dashboard → Storage → Create Database → **Neon** (free tier). Connect it to the project — `DATABASE_URL` is added automatically. Without it the app falls back to ephemeral in-function storage (fine for a quick demo; data resets between instances).
+2. Add a Postgres database: Vercel Dashboard → Storage → Create Database → **Neon** (free tier). Connect it to the project — `DATABASE_URL` is added automatically. This is required: without a durable database, a payment webhook can succeed in one serverless invocation while `/chat` later reads a fresh empty database.
 3. Set the remaining env vars in Project → Settings → Environment Variables: `SUBSCRIPT_SECRET_KEY`, `SUBSCRIPT_WEBHOOK_SECRET`, `DEEPSEEK_API_KEY`, `AUTH_SECRET`, and `APP_URL` = your production URL. Redeploy after adding them.
 4. Register `https://<your-domain>/api/webhooks/subscript` in the SubScript dashboard — no tunnel needed once deployed.
 
 ## How the billing logic works
 
 - **Fulfillment only via verified webhook** — never from the success redirect (per SubScript's own rules).
-- Webhook events are **claimed atomically** (unique insert on `event.id`) so replays are acknowledged but never re-fulfilled; payments are also idempotent at the row level (verified: delivering the same payment twice does not double-extend a plan).
+- Webhook events are stored with processing state and marked processed only after fulfillment succeeds, so replays are acknowledged and transient failures can retry safely; payments are also idempotent at the row level.
 - Billing precedence per message: **active weekly plan → pay-as-you-chat → free cap (3)**.
 - Pro = 100 messages/day; Pro Max = unlimited; renewing the same plan extends the period, switching plans starts a fresh 7 days.
-- Pro / Pro Max are **real recurring subscriptions** via `POST /api/v1/subscriptions` (weekly interval). SubScript re-charges automatically and fires `subscription.renewed`, which extends access another period; `subscription.canceled` sets cancel-at-period-end. They appear as subscription objects on the SubScript merchant dashboard. The $1 activation stays a one-time checkout intent. See [GRADING.md](GRADING.md).
+- Pro / Pro Max are **real recurring subscriptions** via `POST /api/v1/subscriptions` with `interval: "weekly"`, a wallet-bound `subscriber`, and `publishToDm: true` so SubScript can publish the recurring offer into the merchant DM plan flow. SubScript re-charges automatically and fires `subscription.renewed`, which extends access another period; `subscription.canceled` sets cancel-at-period-end. The $1 activation stays a one-time checkout intent. See [GRADING.md](GRADING.md).
 
 ## Project map
 

@@ -8,7 +8,10 @@ export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
 
-  const { product } = (await req.json().catch(() => ({}))) as { product?: ProductKey };
+  const { product, walletAddress } = (await req.json().catch(() => ({}))) as {
+    product?: ProductKey;
+    walletAddress?: string;
+  };
   if (!product || !(product in PRODUCTS)) {
     return Response.json({ error: "Unknown product." }, { status: 400 });
   }
@@ -20,6 +23,24 @@ export async function POST(req: Request) {
   }
 
   const spec = PRODUCTS[product];
+  let subscriberAddress: string | null = null;
+  if (spec.kind === "subscription") {
+    const rawSubscriber = (walletAddress || user.wallet_address || "").trim();
+    if (!/^0x[a-fA-F0-9]{40}$/.test(rawSubscriber)) {
+      return Response.json(
+        { error: "Enter a valid Arc wallet address before creating a subscription checkout." },
+        { status: 400 }
+      );
+    }
+    subscriberAddress = rawSubscriber.toLowerCase();
+    if (subscriberAddress !== user.wallet_address) {
+      await q("UPDATE users SET wallet_address = $1 WHERE id = $2", [
+        subscriberAddress,
+        user.id,
+      ]);
+    }
+  }
+
   // One payments row per logical checkout; its id doubles as the SubScript
   // idempotencyKey so a retried request replays the same checkout/subscription.
   const paymentId = crypto.randomUUID();
@@ -37,6 +58,8 @@ export async function POST(req: Request) {
         description: spec.description,
         amountUsdcMicros: spec.amountUsdcMicros,
         interval: (spec as { interval: string }).interval,
+        subscriber: subscriberAddress!,
+        publishToDm: (spec as { publishToDm?: boolean }).publishToDm ?? false,
         externalReference,
         idempotencyKey: paymentId,
       });

@@ -9,6 +9,7 @@ export const PRODUCTS = {
   pro: {
     kind: "subscription",
     interval: "weekly",
+    publishToDm: true,
     title: "Kris's Script Pro",
     description: "Pro plan: 100 messages/day, billed weekly",
     amountUsdcMicros: "2000000",
@@ -17,6 +18,7 @@ export const PRODUCTS = {
   promax: {
     kind: "subscription",
     interval: "weekly",
+    publishToDm: true,
     title: "Kris's Script Pro Max",
     description: "Pro Max plan: unlimited messages, billed weekly",
     amountUsdcMicros: "5000000",

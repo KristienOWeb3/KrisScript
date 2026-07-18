@@ -127,6 +127,8 @@ export async function createSubscription(opts: {
   description?: string;
   amountUsdcMicros: string;
   interval: string;
+  subscriber: string;
+  publishToDm?: boolean;
   externalReference: string;
   idempotencyKey: string;
 }): Promise<SubscriptionResult> {
@@ -148,6 +150,8 @@ export async function createSubscription(opts: {
     description: opts.description,
     amountUsdcMicros: opts.amountUsdcMicros,
     interval: opts.interval,
+    subscriber: opts.subscriber,
+    publishToDm: opts.publishToDm ?? false,
     externalReference: opts.externalReference,
     idempotencyKey: opts.idempotencyKey,
     sandbox: !key.startsWith("sk_live_"),

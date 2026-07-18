@@ -74,6 +74,10 @@ export default function ActivatePage() {
           After paying you&apos;ll be activated automatically once SubScript&apos;s{" "}
           <code>payment.succeeded</code> webhook is verified - never from the redirect alone.
         </p>
+        <p className="muted mt">
+          If SubScript shows success but this page keeps waiting, the hosted checkout worked but
+          the production webhook is not reaching Kris&apos;s Script yet.
+        </p>
       </div>
     </div>
   );

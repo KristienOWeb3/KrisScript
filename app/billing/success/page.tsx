@@ -49,9 +49,22 @@ export default function BillingSuccessPage() {
                 ? ` (until ${new Date(user.planExpiresAt * 1000).toLocaleString()})`
                 : ""}
             </div>
+            {user.pendingPayment && (
+              <div className="mt">
+                Pending payment: <strong>{user.pendingPayment.product}</strong>. Waiting for
+                SubScript webhook.
+              </div>
+            )}
           </div>
         ) : (
           <p className="muted">Checking account status{".".repeat((ticks % 3) + 1)}</p>
+        )}
+        {user?.pendingPayment && !user.activated && (
+          <div className="error-box">
+            SubScript redirected back successfully, but Kris&apos;s Script has not received the
+            verified webhook yet. Check that SubScript is sending webhooks to{" "}
+            <code>/api/webhooks/subscript</code> with the same webhook secret set in Vercel.
+          </div>
         )}
         <a className="btn" href="/chat">
           Go to chat

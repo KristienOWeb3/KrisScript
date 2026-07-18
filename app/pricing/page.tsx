@@ -27,7 +27,7 @@ export default function PricingPage() {
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product }),
+      body: JSON.stringify({ product, walletAddress: wallet }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -154,6 +154,22 @@ export default function PricingPage() {
           )}
           {error && <div className="error-box">{error}</div>}
 
+          <div className="notice-box">
+            <label>Arc wallet for subscriptions and vault billing</label>
+            <input
+              type="text"
+              placeholder="0x..."
+              value={wallet}
+              onChange={(e) => setWallet(e.target.value)}
+              style={{ marginTop: 10 }}
+            />
+            <p className="muted mt">
+              Pro and Pro Max checkouts are bound to this wallet so SubScript can create a
+              recurring subscription offer and Kris&apos;s Script can match the webhook back to
+              your account.
+            </p>
+          </div>
+
           <div className="plans">
             <div className="plan-card">
               <h3>Free</h3>
@@ -220,12 +236,7 @@ export default function PricingPage() {
                 <li>Used only when no plan is active</li>
               </ul>
               <label>Your Arc wallet address (vault owner)</label>
-              <input
-                type="text"
-                placeholder="0x..."
-                value={wallet}
-                onChange={(e) => setWallet(e.target.value)}
-              />
+              <input type="text" placeholder="0x..." value={wallet} readOnly />
               {user?.paygEnabled ? (
                 <>
                   <p className="muted mt">

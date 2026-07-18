@@ -76,13 +76,15 @@ async function init(): Promise<Backend> {
       },
     };
   }
-  // No DATABASE_URL: embedded Postgres (PGlite), zero setup. Persists to
-  // data/pglite locally; on Vercel it falls back to ephemeral /tmp storage,
-  // so set DATABASE_URL there for anything real.
+  if (process.env.VERCEL) {
+    throw new Error(
+      "DATABASE_URL is required on Vercel. Without a durable Postgres database, payment and chat state can disappear between serverless invocations."
+    );
+  }
+  // No DATABASE_URL outside Vercel: embedded Postgres (PGlite), zero setup.
+  // Persists to data/pglite locally.
   const { PGlite } = await import("@electric-sql/pglite");
-  const dir = process.env.VERCEL
-    ? "/tmp/kris-script-pglite"
-    : path.join(process.cwd(), "data", "pglite");
+  const dir = path.join(process.cwd(), "data", "pglite");
   const db = new PGlite(dir);
   await db.exec(SCHEMA);
   return {
