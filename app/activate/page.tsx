@@ -49,6 +49,11 @@ export default function ActivatePage() {
     window.location.href = data.checkoutUrl;
   }
 
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+  }
+
   return (
     <div className="center-page">
       <div className="card">
@@ -69,6 +74,17 @@ export default function ActivatePage() {
         <button className="btn" onClick={pay} disabled={busy}>
           {busy ? (waiting ? "Redirecting to checkout..." : "Creating checkout...") : "Pay $1 and activate"}
         </button>
+        <div className="prompt-row" style={{ marginTop: 16 }}>
+          <a className="btn secondary small" href="/login">
+            Sign in
+          </a>
+          <a className="btn secondary small" href="/signup">
+            Create account
+          </a>
+          <button className="btn ghost small" type="button" onClick={logout}>
+            Sign out
+          </button>
+        </div>
         {error && <div className="error-box">{error}</div>}
         <p className="muted mt">
           After paying you&apos;ll be activated automatically once SubScript&apos;s{" "}
@@ -76,7 +92,8 @@ export default function ActivatePage() {
         </p>
         <p className="muted mt">
           If SubScript shows success but this page keeps waiting, the hosted checkout worked but
-          the production webhook is not reaching Kris&apos;s Script yet.
+          the production webhook is not reaching Kris&apos;s Script yet. Use{" "}
+          <code>https://kris-script.vercel.app/api/webhooks/subscript</code> in SubScript.
         </p>
       </div>
     </div>

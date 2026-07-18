@@ -61,9 +61,10 @@ export default function BillingSuccessPage() {
         )}
         {user?.pendingPayment && !user.activated && (
           <div className="error-box">
-            SubScript redirected back successfully, but Kris&apos;s Script has not received the
-            verified webhook yet. Check that SubScript is sending webhooks to{" "}
-            <code>/api/webhooks/subscript</code> with the same webhook secret set in Vercel.
+            Almost there: SubScript redirected back successfully, but Kris&apos;s Script is still
+            waiting for the signed payment webhook. Set the SubScript webhook URL to{" "}
+            <code>https://kris-script.vercel.app/api/webhooks/subscript</code> and make sure the
+            webhook secret matches Vercel&apos;s <code>SUBSCRIPT_WEBHOOK_SECRET</code>.
           </div>
         )}
         <a className="btn" href="/chat">
@@ -72,6 +73,14 @@ export default function BillingSuccessPage() {
         <a className="btn secondary" href="/pricing">
           View plans
         </a>
+        <div className="prompt-row" style={{ marginTop: 16 }}>
+          <a className="btn secondary small" href="/login">
+            Sign in
+          </a>
+          <a className="btn secondary small" href="/signup">
+            Create account
+          </a>
+        </div>
       </div>
     </div>
   );
