@@ -1,6 +1,6 @@
 import { q, one } from "./db";
 import type { User } from "./auth";
-import { PLAN_DURATION_SECONDS } from "./plans";
+import { PLAN_DURATION_SECONDS, PRODUCTS } from "./plans";
 
 export type Payment = {
   id: string;
@@ -48,26 +48,32 @@ export async function fulfillPayment(
 }
 
 type SubEventData = {
+  id?: string;
   subscription_id?: string;
   status?: string;
   external_reference?: string;
+  externalReference?: string;
   cancel_at_period_end?: boolean;
+  cancelAtPeriodEnd?: boolean;
+  amount_usdc_micros?: string;
+  amountUsdcMicros?: string;
 };
 
 /** Resolve which user + product a subscription event belongs to. */
 async function resolveSubUser(
   data: SubEventData
 ): Promise<{ user: User; product: "pro" | "promax" } | null> {
-  const ref = data.external_reference || "";
+  const ref = data.external_reference || data.externalReference || "";
   const [product, userId] = ref.split(":");
   if ((product === "pro" || product === "promax") && userId) {
     const user = await one<User>("SELECT * FROM users WHERE id = $1", [Number(userId)]);
     if (user) return { user, product };
   }
   // Fallback: match a subscription id we've already stored.
-  if (data.subscription_id) {
+  const subId = data.subscription_id || data.id;
+  if (subId) {
     const user = await one<User>("SELECT * FROM users WHERE subscription_id = $1", [
-      data.subscription_id,
+      subId,
     ]);
     if (user) {
       const p = user.plan === "promax" ? "promax" : "pro";
@@ -92,32 +98,44 @@ export async function handleSubscriptionEvent(
   const { user, product } = resolved;
   const now = Math.floor(Date.now() / 1000);
   const status = data.status || "";
+  const subId = data.subscription_id || data.id;
 
-  // Always keep the stored subscription id / status current.
+  // Determine current active product by checking payload amounts (handles DM upgrades).
+  let activeProduct = product;
+  const amt = data.amountUsdcMicros || data.amount_usdc_micros;
+  if (amt) {
+    if (amt === PRODUCTS.promax.amountUsdcMicros) activeProduct = "promax";
+    else if (amt === PRODUCTS.pro.amountUsdcMicros) activeProduct = "pro";
+  }
+
+  // Always keep the stored subscription id / status / plan current.
   await q(
-    "UPDATE users SET subscription_id = COALESCE($1, subscription_id), sub_status = $2 WHERE id = $3",
-    [data.subscription_id ?? null, status || null, user.id]
+    "UPDATE users SET subscription_id = COALESCE($1, subscription_id), sub_status = $2, plan = $4 WHERE id = $3",
+    [subId ?? null, status || null, user.id, activeProduct]
   );
 
   const isCharge = type === "subscription.created" || type === "subscription.renewed";
 
   if (isCharge && status === "active") {
     const base =
-      user.plan === product && (user.plan_expires_at ?? 0) > now
+      user.plan === activeProduct && (user.plan_expires_at ?? 0) > now
         ? user.plan_expires_at!
         : now;
     await q(
-      "UPDATE users SET plan = $1, plan_expires_at = $2, sub_cancel_at_period_end = 0 WHERE id = $3",
-      [product, base + PLAN_DURATION_SECONDS, user.id]
+      "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0 WHERE id = $2",
+      [base + PLAN_DURATION_SECONDS, user.id]
     );
   } else if (type === "subscription.canceled") {
     // Let access ride until plan_expires_at, but flag that it won't renew.
     await q("UPDATE users SET sub_cancel_at_period_end = 1 WHERE id = $1", [user.id]);
-  } else if (type === "subscription.updated" && data.cancel_at_period_end != null) {
-    await q("UPDATE users SET sub_cancel_at_period_end = $1 WHERE id = $2", [
-      data.cancel_at_period_end ? 1 : 0,
-      user.id,
-    ]);
+  } else if (type === "subscription.updated") {
+    const cancelAt = data.cancel_at_period_end ?? data.cancelAtPeriodEnd;
+    if (cancelAt != null) {
+      await q("UPDATE users SET sub_cancel_at_period_end = $1 WHERE id = $2", [
+        cancelAt ? 1 : 0,
+        user.id,
+      ]);
+    }
   }
   // subscription.payment_failed: status stored above (e.g. past_due); no extension.
 
