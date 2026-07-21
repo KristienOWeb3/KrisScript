@@ -43,6 +43,15 @@ export async function fulfillPayment(
 
   if (payment.product === "signup") {
     await q("UPDATE users SET activated = 1 WHERE id = $1", [payment.user_id]);
+  } else if (payment.product === "pro" || payment.product === "promax") {
+    const now = Math.floor(Date.now() / 1000);
+    const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
+    await handleSubscriptionEvent("subscription.created", {
+      subscription_id: payment.intent_id ?? undefined,
+      status: "active",
+      external_reference: externalReference,
+      amount_usdc_micros: payment.amount_micros,
+    });
   }
   return { ok: true };
 }
@@ -69,7 +78,6 @@ async function resolveSubUser(
     const user = await one<User>("SELECT * FROM users WHERE id = $1", [Number(userId)]);
     if (user) return { user, product };
   }
-  // Fallback: match a subscription id we've already stored.
   const subId = data.subscription_id || data.id;
   if (subId) {
     const user = await one<User>("SELECT * FROM users WHERE subscription_id = $1", [
@@ -78,6 +86,14 @@ async function resolveSubUser(
     if (user) {
       const p = user.plan === "promax" ? "promax" : "pro";
       return { user, product: p };
+    }
+    const payment = await one<Payment>(
+      "SELECT * FROM payments WHERE intent_id = $1 LIMIT 1",
+      [subId]
+    );
+    if (payment && (payment.product === "pro" || payment.product === "promax")) {
+      const user = await one<User>("SELECT * FROM users WHERE id = $1", [payment.user_id]);
+      if (user) return { user, product: payment.product };
     }
   }
   return null;
@@ -114,17 +130,24 @@ export async function handleSubscriptionEvent(
     [subId ?? null, status || null, user.id, activeProduct]
   );
 
-  const isCharge = type === "subscription.created" || type === "subscription.renewed";
+  const isCharge =
+    type === "subscription.created" ||
+    type === "subscription.renewed" ||
+    (type === "subscription.updated" && status === "active");
 
   if (isCharge && status === "active") {
-    const base =
+    const existingExpiry =
       user.plan === activeProduct && (user.plan_expires_at ?? 0) > now
         ? user.plan_expires_at!
-        : now;
-    await q(
-      "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0 WHERE id = $2",
-      [base + PLAN_DURATION_SECONDS, user.id]
-    );
+        : 0;
+    const base = existingExpiry > now ? existingExpiry : now;
+    const alreadyExtended = existingExpiry > now && type === "subscription.updated";
+    if (!alreadyExtended) {
+      await q(
+        "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0 WHERE id = $2",
+        [base + PLAN_DURATION_SECONDS, user.id]
+      );
+    }
   } else if (type === "subscription.canceled") {
     // Let access ride until plan_expires_at, but flag that it won't renew.
     await q("UPDATE users SET sub_cancel_at_period_end = 1 WHERE id = $1", [user.id]);

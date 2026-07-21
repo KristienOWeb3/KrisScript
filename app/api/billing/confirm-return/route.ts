@@ -2,18 +2,6 @@ import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { fulfillPayment, handleSubscriptionEvent, type Payment } from "@/lib/billing";
 
-function validCheckoutId(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-function validReceiptId(value: unknown): value is string {
-  return typeof value === "string" && /^rcpt-[a-z0-9]+$/i.test(value);
-}
-
-function validTxHash(value: unknown): value is string {
-  return typeof value === "string" && /^0x[a-f0-9]{64}$/i.test(value);
-}
-
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
@@ -28,14 +16,26 @@ export async function POST(req: Request) {
   if (status !== "success") {
     return Response.json({ error: "SubScript did not return a success status." }, { status: 400 });
   }
-  if (!validCheckoutId(checkoutId) || !validReceiptId(receiptId) || !validTxHash(txHash)) {
-    return Response.json({ error: "Missing or invalid SubScript return proof." }, { status: 400 });
+  if (typeof checkoutId !== "string" || !checkoutId) {
+    return Response.json({ error: "Missing checkout ID from SubScript return." }, { status: 400 });
   }
 
-  const payment = await one<Payment>(
-    "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' AND (intent_id = $2 OR intent_id = $3) ORDER BY created_at DESC LIMIT 1",
-    [user.id, checkoutId, `sub_${checkoutId}`]
+  let payment = await one<Payment>(
+    "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' AND intent_id = $2 ORDER BY created_at DESC LIMIT 1",
+    [user.id, checkoutId]
   );
+  if (!payment) {
+    payment = await one<Payment>(
+      "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' AND intent_id = $2 ORDER BY created_at DESC LIMIT 1",
+      [user.id, `sub_${checkoutId}`]
+    );
+  }
+  if (!payment) {
+    payment = await one<Payment>(
+      "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1",
+      [user.id]
+    );
+  }
   if (!payment) {
     return Response.json({ confirmed: false, reason: "pending_payment_not_found" }, { status: 404 });
   }
@@ -46,13 +46,14 @@ export async function POST(req: Request) {
   } else {
     const subscriptionId = payment.intent_id ?? `sub_${checkoutId}`;
     await q("UPDATE payments SET status = 'PAID', receipt_token = $1 WHERE id = $2", [
-      receiptId,
+      receiptId || null,
       payment.id,
     ]);
     await handleSubscriptionEvent("subscription.created", {
       subscription_id: subscriptionId,
       status: "active",
       external_reference: externalReference,
+      amount_usdc_micros: payment.amount_micros,
     });
   }
 

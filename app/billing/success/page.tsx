@@ -26,7 +26,7 @@ export default function BillingSuccessPage() {
     const checkoutId = params.get("subscript_checkout_id");
     const receiptId = params.get("subscript_receipt_id");
     const txHash = params.get("subscript_tx_hash");
-    if (status !== "success" || !checkoutId || !receiptId || !txHash) return;
+    if (status !== "success" || !checkoutId) return;
 
     let cancelled = false;
     fetch("/api/billing/confirm-return", {
