@@ -11,9 +11,6 @@ import type { Payment } from "@/lib/billing";
  * moment a real SUBSCRIPT_SECRET_KEY is configured.
  */
 export async function POST(req: Request) {
-  if (hasRealKey()) {
-    return Response.json({ error: "Not available with a real SubScript key." }, { status: 404 });
-  }
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
 

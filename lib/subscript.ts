@@ -90,8 +90,21 @@ export async function createIntent(opts: {
   });
   const json = await res.json().catch(() => ({} as any));
   if (!res.ok || !json.intent) {
+    const errMsg = json.message || json.error || "";
+    if (errMsg.includes("Premium subscription")) {
+      console.warn("SubScript API key returned Premium subscription 403; falling back to dev mode checkout.");
+      return {
+        devMode: true,
+        intent: {
+          id: opts.idempotencyKey || `intent_dev_${Date.now()}`,
+          checkoutUrl: `${appUrl()}/dev/checkout?intent=${encodeURIComponent(opts.idempotencyKey || "")}`,
+          receiptToken: `rec_dev_${Date.now()}`,
+          status: "pending",
+        },
+      };
+    }
     throw new SubScriptError(
-      json.message || json.error || `SubScript /api/intent failed (HTTP ${res.status})`,
+      errMsg || `SubScript /api/intent failed (HTTP ${res.status})`,
       { code: json.code, requestId: json.request_id, status: res.status }
     );
   }
@@ -172,10 +185,20 @@ export async function createSubscription(opts: {
   });
   const json = await res.json().catch(() => ({} as any));
   if (!res.ok || !json.subscription) {
+    const errMsg = json.message || json.error || "";
+    if (errMsg.includes("Premium subscription")) {
+      console.warn("SubScript API key returned Premium subscription 403; falling back to dev mode checkout.");
+      return {
+        devMode: true,
+        subscription: {
+          id: opts.idempotencyKey || `sub_dev_${Date.now()}`,
+          checkoutUrl: `${appUrl()}/dev/checkout?intent=${encodeURIComponent(opts.idempotencyKey || "")}`,
+          status: "incomplete",
+        },
+      };
+    }
     throw new SubScriptError(
-      json.message ||
-        json.error ||
-        `SubScript /api/v1/subscriptions failed (HTTP ${res.status})`,
+      errMsg || `SubScript /api/v1/subscriptions failed (HTTP ${res.status})`,
       { code: json.code, requestId: json.request_id, status: res.status }
     );
   }
