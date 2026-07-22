@@ -147,6 +147,9 @@ export async function handleSubscriptionEvent(
         "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0 WHERE id = $2",
         [base + PLAN_DURATION_SECONDS, user.id]
       );
+    }
+  }
+
   const isCanceled =
     type === "subscription.canceled" ||
     status === "canceled" ||
