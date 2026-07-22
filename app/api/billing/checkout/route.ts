@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { q } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { createIntent, createSubscription, SubScriptError } from "@/lib/subscript";
+import { createIntent, createSubscription, cancelSubscription, SubScriptError } from "@/lib/subscript";
 import { PRODUCTS, type ProductKey } from "@/lib/plans";
 
 export async function POST(req: Request) {
@@ -48,6 +48,15 @@ export async function POST(req: Request) {
 
   try {
     if (spec.kind === "subscription") {
+      // If user has a previous subscription set to cancel, attempt to clear it on Subscript first
+      if (user.subscription_id && (user.sub_cancel_at_period_end || user.sub_status === "canceled")) {
+        try {
+          await cancelSubscription(user.subscription_id);
+        } catch {
+          // Ignore if already removed on Subscript
+        }
+      }
+
       // Pro / Pro Max are real recurring subscriptions on SubScript.
       const result = await createSubscription({
         title: spec.title,
@@ -100,9 +109,16 @@ export async function POST(req: Request) {
   } catch (err) {
     const e = err as SubScriptError;
     await q("UPDATE payments SET status = 'FAILED' WHERE id = $1", [paymentId]);
+
+    let userMsg = e.message;
+    if (e.message?.toLowerCase().includes("already have an active subscription")) {
+      userMsg =
+        "SubScript has an existing subscription registered for this wallet address. You can reactivate it directly in your SubScript Merchant DM or enter a new wallet address to checkout.";
+    }
+
     return Response.json(
-      { error: e.message, code: e.code, requestId: e.requestId },
-      { status: 502 }
+      { error: userMsg, code: e.code, requestId: e.requestId },
+      { status: 400 }
     );
   }
 }
