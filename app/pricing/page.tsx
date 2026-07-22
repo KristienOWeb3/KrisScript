@@ -186,6 +186,8 @@ export default function PricingPage() {
               </div>
             </div>
           </div>
+
+          <div className="plans">
             <div className="plan-card">
               <h3>Free</h3>
               <div className="price">
