@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 export default function PricingPage() {
   const router = useRouter();
   const [me, setMe] = useState<any>(null);
-  const [wallet, setWallet] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
@@ -15,7 +14,6 @@ export default function PricingPage() {
     const data = await fetch("/api/me").then((r) => r.json());
     if (!data.user) return router.replace("/login");
     setMe(data);
-    if (data.user.walletAddress) setWallet(data.user.walletAddress);
   }
   useEffect(() => {
     load();
@@ -23,12 +21,13 @@ export default function PricingPage() {
   }, []);
 
   async function subscribe(product: "pro" | "promax") {
+    if (paymentMethod === "card") return;
     setBusy(product);
     setError("");
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, paymentMethod, walletAddress: wallet }),
+      body: JSON.stringify({ product, paymentMethod: "subscript" }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -55,7 +54,7 @@ export default function PricingPage() {
     const res = await fetch("/api/billing/payg", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled, walletAddress: wallet }),
+      body: JSON.stringify({ enabled }),
     });
     const data = await res.json();
     if (!res.ok) setError(data.error);
@@ -162,18 +161,6 @@ export default function PricingPage() {
             <div className="payment-method-title">Choose payment method</div>
             <div className="payment-method-selector">
               <div
-                className={`payment-method-option ${paymentMethod === "card" ? "selected" : ""}`}
-                onClick={() => setPaymentMethod("card")}
-              >
-                <div className="payment-method-radio" />
-                <div className="payment-method-icon">💳</div>
-                <div className="payment-method-details">
-                  <strong>Card</strong>
-                  <span>Credit / Debit Card</span>
-                </div>
-              </div>
-
-              <div
                 className={`payment-method-option ${paymentMethod === "subscript" ? "selected" : ""}`}
                 onClick={() => setPaymentMethod("subscript")}
               >
@@ -181,10 +168,36 @@ export default function PricingPage() {
                 <div className="payment-method-icon">⚡</div>
                 <div className="payment-method-details">
                   <strong>SubScript</strong>
-                  <span>USDC on Arc Web3</span>
+                  <span>USDC on Arc Web3 Wallet</span>
+                </div>
+              </div>
+
+              <div
+                className="payment-method-option disabled"
+                style={{ opacity: 0.5, cursor: "not-allowed" }}
+                title="Card payment method coming soon"
+              >
+                <div className="payment-method-radio" />
+                <div className="payment-method-icon">💳</div>
+                <div className="payment-method-details">
+                  <strong>Card</strong>
+                  <span>Credit / Debit Card (Coming Soon)</span>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="notice-box">
+            <label style={{ margin: "0 0 4px", fontSize: "0.85rem" }}>SubScript Connected Wallet</label>
+            {user?.walletAddress ? (
+              <p style={{ margin: 0, fontWeight: 600, wordBreak: "break-all" }}>
+                🔒 {user.walletAddress} <span style={{ color: "#65d98f", fontSize: "0.8rem", fontWeight: 400 }}>(Verified via SubScript)</span>
+              </p>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                No wallet connected yet. SubScript automatically connects and verifies your Arc wallet during checkout.
+              </p>
+            )}
           </div>
 
           <div className="plans">
@@ -252,43 +265,66 @@ export default function PricingPage() {
                 <li>Charged per message via report-usage</li>
                 <li>Used only when no plan is active</li>
               </ul>
-              <label>Your Arc wallet address (vault owner)</label>
-              <input
-                type="text"
-                placeholder="0x..."
-                value={wallet}
-                onChange={(e) => setWallet(e.target.value)}
-              />
-              {user?.paygEnabled ? (
-                <>
-                  <p className="muted mt">
-                    Enabled - accrued this cycle: <strong>${user.paygAccrued}</strong>
-                  </p>
-                  <button
-                    className="btn secondary"
-                    onClick={() => setPayg(false)}
-                    disabled={busy !== ""}
-                  >
-                    Disable pay-as-you-chat
+              {user?.walletAddress ? (
+                user?.paygEnabled ? (
+                  <>
+                    <p className="muted mt">
+                      Enabled - accrued this cycle: <strong>${user.paygAccrued}</strong>
+                    </p>
+                    <button
+                      className="btn secondary"
+                      onClick={() => setPayg(false)}
+                      disabled={busy !== ""}
+                    >
+                      Disable pay-as-you-chat
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn" onClick={() => setPayg(true)} disabled={busy !== ""}>
+                    {busy === "payg" ? "Saving..." : "Enable pay-as-you-chat"}
                   </button>
-                </>
+                )
               ) : (
-                <button className="btn" onClick={() => setPayg(true)} disabled={busy !== ""}>
-                  {busy === "payg" ? "Saving..." : "Enable pay-as-you-chat"}
+                <button
+                  className="btn secondary"
+                  onClick={() => subscribe("pro")}
+                  disabled={busy !== ""}
+                >
+                  Connect SubScript Vault
                 </button>
               )}
             </div>
           </div>
 
-          {user && user.plan !== "free" && user.subscriptionId && !user.subCancelAtPeriodEnd && (
-            <div style={{ marginTop: 24 }}>
-              <button
+          <div className="notice-box" style={{ marginTop: 28, background: "#0d0f12", borderColor: "#252a31" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <strong style={{ fontSize: "1rem", display: "block" }}>SubScript User Dashboard & DM</strong>
+                <span className="muted">
+                  Manage, upgrade, or control your subscription plan directly in your SubScript User DM.
+                </span>
+              </div>
+              <a
                 className="btn secondary"
-                style={{ maxWidth: 260 }}
+                style={{ width: "auto", margin: 0 }}
+                href="https://www.subscriptonarc.com"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Manage in SubScript DM ↗
+              </a>
+            </div>
+          </div>
+
+          {user && user.plan !== "free" && user.subscriptionId && !user.subCancelAtPeriodEnd && (
+            <div style={{ marginTop: 18 }}>
+              <button
+                className="btn ghost"
+                style={{ maxWidth: 220, fontSize: "0.82rem" }}
                 onClick={cancelSub}
                 disabled={busy !== ""}
               >
-                {busy === "cancel" ? "Cancelling..." : "Cancel subscription"}
+                {busy === "cancel" ? "Cancelling..." : "Cancel on platform"}
               </button>
             </div>
           )}
