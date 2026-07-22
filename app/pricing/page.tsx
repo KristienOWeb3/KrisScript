@@ -9,6 +9,7 @@ export default function PricingPage() {
   const [wallet, setWallet] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
 
   async function load() {
     const data = await fetch("/api/me").then((r) => r.json());
@@ -27,7 +28,7 @@ export default function PricingPage() {
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, walletAddress: wallet }),
+      body: JSON.stringify({ product, paymentMethod, walletAddress: wallet }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -157,7 +158,34 @@ export default function PricingPage() {
           )}
           {error && <div className="error-box">{error}</div>}
 
-          <div className="plans">
+          <div className="payment-method-wrap">
+            <div className="payment-method-title">Choose payment method</div>
+            <div className="payment-method-selector">
+              <div
+                className={`payment-method-option ${paymentMethod === "card" ? "selected" : ""}`}
+                onClick={() => setPaymentMethod("card")}
+              >
+                <div className="payment-method-radio" />
+                <div className="payment-method-icon">💳</div>
+                <div className="payment-method-details">
+                  <strong>Card</strong>
+                  <span>Credit / Debit Card</span>
+                </div>
+              </div>
+
+              <div
+                className={`payment-method-option ${paymentMethod === "subscript" ? "selected" : ""}`}
+                onClick={() => setPaymentMethod("subscript")}
+              >
+                <div className="payment-method-radio" />
+                <div className="payment-method-icon">⚡</div>
+                <div className="payment-method-details">
+                  <strong>SubScript</strong>
+                  <span>USDC on Arc Web3</span>
+                </div>
+              </div>
+            </div>
+          </div>
             <div className="plan-card">
               <h3>Free</h3>
               <div className="price">

@@ -9,6 +9,7 @@ export default function ActivatePage() {
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [devMode, setDevMode] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export default function ActivatePage() {
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product: "signup" }),
+      body: JSON.stringify({ product: "signup", paymentMethod }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -71,6 +72,36 @@ export default function ActivatePage() {
             locally so you can test the full flow.
           </div>
         )}
+
+        <div className="payment-method-wrap">
+          <div className="payment-method-title">Choose payment method</div>
+          <div className="payment-method-selector">
+            <div
+              className={`payment-method-option ${paymentMethod === "card" ? "selected" : ""}`}
+              onClick={() => setPaymentMethod("card")}
+            >
+              <div className="payment-method-radio" />
+              <div className="payment-method-icon">💳</div>
+              <div className="payment-method-details">
+                <strong>Card</strong>
+                <span>Credit / Debit Card</span>
+              </div>
+            </div>
+
+            <div
+              className={`payment-method-option ${paymentMethod === "subscript" ? "selected" : ""}`}
+              onClick={() => setPaymentMethod("subscript")}
+            >
+              <div className="payment-method-radio" />
+              <div className="payment-method-icon">⚡</div>
+              <div className="payment-method-details">
+                <strong>SubScript</strong>
+                <span>USDC on Arc Web3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button className="btn" onClick={pay} disabled={busy}>
           {busy ? (waiting ? "Redirecting to checkout..." : "Creating checkout...") : "Pay $1 and activate"}
         </button>
