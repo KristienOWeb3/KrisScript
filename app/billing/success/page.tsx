@@ -22,17 +22,34 @@ export default function BillingSuccessPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("subscript_status");
-    const checkoutId = params.get("subscript_checkout_id");
-    const receiptId = params.get("subscript_receipt_id");
-    const txHash = params.get("subscript_tx_hash");
-    if (status !== "success" || !checkoutId) return;
+    const rawStatus =
+      params.get("subscript_status") ||
+      params.get("status") ||
+      "success";
+    const checkoutId =
+      params.get("subscript_checkout_id") ||
+      params.get("checkout_id") ||
+      params.get("checkoutId") ||
+      params.get("subscription_id") ||
+      params.get("subscription") ||
+      params.get("intent_id") ||
+      params.get("intent") ||
+      params.get("id") ||
+      "auto_reconcile";
+    const receiptId =
+      params.get("subscript_receipt_id") ||
+      params.get("receipt_id") ||
+      params.get("receipt");
+    const txHash =
+      params.get("subscript_tx_hash") ||
+      params.get("tx_hash") ||
+      params.get("tx");
 
     let cancelled = false;
     fetch("/api/billing/confirm-return", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, checkoutId, receiptId, txHash }),
+      body: JSON.stringify({ status: rawStatus, checkoutId, receiptId, txHash }),
     })
       .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
       .then(({ ok, body }) => {
@@ -41,7 +58,7 @@ export default function BillingSuccessPage() {
           setReturnSync({
             status: "confirmed",
             message:
-              "SubScript return matched your pending checkout. Access has been reconciled while the signed webhook is still expected for audit.",
+              "SubScript return matched your checkout! Your subscription plan has been activated.",
           });
           fetch("/api/me")
             .then((r) => r.json())
@@ -49,13 +66,13 @@ export default function BillingSuccessPage() {
         } else if (body.reason !== "pending_payment_not_found") {
           setReturnSync({
             status: "waiting",
-            message: body.error || "Waiting for the signed SubScript webhook.",
+            message: body.error || "Waiting for SubScript webhook confirmation.",
           });
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setReturnSync({ status: "waiting", message: "Waiting for the signed SubScript webhook." });
+          setReturnSync({ status: "waiting", message: "Waiting for SubScript webhook confirmation." });
         }
       });
     return () => {

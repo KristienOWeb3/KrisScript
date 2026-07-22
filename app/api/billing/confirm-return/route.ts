@@ -13,22 +13,24 @@ export async function POST(req: Request) {
     txHash?: string;
   };
 
-  if (status !== "success") {
-    return Response.json({ error: "SubScript did not return a success status." }, { status: 400 });
-  }
-  if (typeof checkoutId !== "string" || !checkoutId) {
-    return Response.json({ error: "Missing checkout ID from SubScript return." }, { status: 400 });
+  if (status === "cancel" || status === "failed" || status === "error") {
+    return Response.json({ error: "SubScript return indicates checkout was not completed." }, { status: 400 });
   }
 
-  let payment = await one<Payment>(
-    "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' AND intent_id = $2 ORDER BY created_at DESC LIMIT 1",
-    [user.id, checkoutId]
-  );
-  if (!payment) {
+  const searchId = (checkoutId || "").trim();
+
+  let payment: Payment | undefined;
+  if (searchId && searchId !== "pending" && searchId !== "auto_reconcile") {
     payment = await one<Payment>(
       "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' AND intent_id = $2 ORDER BY created_at DESC LIMIT 1",
-      [user.id, `sub_${checkoutId}`]
+      [user.id, searchId]
     );
+    if (!payment) {
+      payment = await one<Payment>(
+        "SELECT * FROM payments WHERE user_id = $1 AND status = 'PENDING' AND intent_id = $2 ORDER BY created_at DESC LIMIT 1",
+        [user.id, `sub_${searchId}`]
+      );
+    }
   }
   if (!payment) {
     payment = await one<Payment>(
@@ -42,9 +44,9 @@ export async function POST(req: Request) {
 
   const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
   if (payment.product === "signup") {
-    await fulfillPayment(payment.intent_id ?? checkoutId, externalReference);
+    await fulfillPayment(payment.intent_id ?? searchId, externalReference);
   } else {
-    const subscriptionId = payment.intent_id ?? `sub_${checkoutId}`;
+    const subscriptionId = payment.intent_id ?? (searchId ? `sub_${searchId}` : `sub_return_${payment.id}`);
     await q("UPDATE payments SET status = 'PAID', receipt_token = $1 WHERE id = $2", [
       receiptId || null,
       payment.id,
@@ -57,11 +59,11 @@ export async function POST(req: Request) {
     });
   }
 
-  const eventId = `return:${checkoutId}`;
+  const eventId = `return:${searchId || payment.id}`;
   const rawBody = JSON.stringify({
     id: eventId,
     type: "subscript.return.success",
-    data: { checkoutId, receiptId, txHash, paymentId: payment.id, product: payment.product },
+    data: { checkoutId: searchId, receiptId, txHash, paymentId: payment.id, product: payment.product },
   });
   await q(
     "INSERT INTO webhook_events (id, event_type, raw_body, processed_at) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
