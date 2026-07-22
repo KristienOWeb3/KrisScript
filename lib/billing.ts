@@ -147,10 +147,15 @@ export async function handleSubscriptionEvent(
         "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0 WHERE id = $2",
         [base + PLAN_DURATION_SECONDS, user.id]
       );
-    }
-  } else if (type === "subscription.canceled") {
-    // Let access ride until plan_expires_at, but flag that it won't renew.
-    await q("UPDATE users SET sub_cancel_at_period_end = 1 WHERE id = $1", [user.id]);
+  const isCanceled =
+    type === "subscription.canceled" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    data.cancel_at_period_end === true ||
+    data.cancelAtPeriodEnd === true;
+
+  if (isCanceled) {
+    await q("UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1", [user.id]);
   } else if (type === "subscription.updated") {
     const cancelAt = data.cancel_at_period_end ?? data.cancelAtPeriodEnd;
     if (cancelAt != null) {

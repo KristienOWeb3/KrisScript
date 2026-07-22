@@ -150,7 +150,7 @@ export async function createSubscription(opts: {
     description: opts.description,
     amountUsdcMicros: opts.amountUsdcMicros,
     interval: opts.interval,
-    publishToDm: key.startsWith("sk_live_") ? (opts.publishToDm ?? false) : false,
+    publishToDm: opts.publishToDm ?? false,
     ...(opts.subscriber
       ? { subscriber: opts.subscriber, externalReference: opts.externalReference }
       : {}),
