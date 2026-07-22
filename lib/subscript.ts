@@ -158,17 +158,21 @@ export async function createSubscription(opts: {
   }
 
   const key = process.env.SUBSCRIPT_SECRET_KEY!;
+  const isLiveKey = key.startsWith("sk_live_");
   const body: Record<string, unknown> = {
     title: opts.title,
     description: opts.description,
     amountUsdcMicros: opts.amountUsdcMicros,
     interval: opts.interval,
-    publishToDm: opts.publishToDm ?? false,
+    // SubScript's live DM plan publication is not supported by sandbox/test
+    // keys. Keep recurring checkout testable with sk_test_* keys, and only
+    // publish into the DM plan flow when using a live merchant key.
+    publishToDm: isLiveKey ? (opts.publishToDm ?? false) : false,
     ...(opts.subscriber
       ? { subscriber: opts.subscriber, externalReference: opts.externalReference }
       : {}),
     idempotencyKey: opts.idempotencyKey,
-    sandbox: !key.startsWith("sk_live_"),
+    sandbox: !isLiveKey,
   };
   if (appUrl().startsWith("https://")) {
     body.successUrl = `${appUrl()}/billing/success`;
