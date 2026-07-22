@@ -64,10 +64,13 @@ export default function PricingPage() {
 
   const user = me?.user;
   const activeSub = (p: string) =>
-    user?.plan === p && (user?.subStatus === "active" || user?.planExpiresAt);
+    user?.plan === p &&
+    (user?.subStatus === "active" || user?.planExpiresAt) &&
+    !user?.subCancelAtPeriodEnd;
 
   function planButtonLabel(p: "pro" | "promax", price: string) {
     if (busy === p) return "Creating subscription...";
+    if (user?.plan === p && user?.subCancelAtPeriodEnd) return `Re-subscribe - ${price}`;
     if (activeSub(p)) return "Subscribed";
     return `Subscribe - ${price}`;
   }
