@@ -11,13 +11,17 @@ export async function POST(req: Request) {
   };
 
   if (enabled) {
-    if (!user.wallet_address) {
+    const address = (walletAddress || user.wallet_address || "").trim();
+    if (!address) {
       return Response.json(
-        { error: "Connect your SubScript wallet by completing a checkout first." },
+        { error: "Please enter your SubScript wallet address (0x...) or complete a SubScript checkout first." },
         { status: 400 }
       );
     }
-    await q("UPDATE users SET payg_enabled = 1 WHERE id = $1", [user.id]);
+    await q("UPDATE users SET payg_enabled = 1, wallet_address = $1 WHERE id = $2", [
+      address,
+      user.id,
+    ]);
   } else {
     await q("UPDATE users SET payg_enabled = 0 WHERE id = $1", [user.id]);
   }

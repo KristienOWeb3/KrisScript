@@ -21,7 +21,8 @@ export type Payment = {
  */
 export async function fulfillPayment(
   intentId: string | undefined,
-  merchantReference: string | undefined
+  merchantReference: string | undefined,
+  eventData?: any
 ): Promise<{ ok: boolean; already?: boolean; reason?: string }> {
   let payment: Payment | undefined;
   if (intentId) {
@@ -34,6 +35,11 @@ export async function fulfillPayment(
     }
   }
   if (!payment) return { ok: false, reason: "payment_not_found" };
+
+  const wallet = eventData?.subscriber || eventData?.subscriber_address || eventData?.user_address || eventData?.wallet_address;
+  if (wallet) {
+    await q("UPDATE users SET wallet_address = COALESCE(wallet_address, $1) WHERE id = $2", [wallet, payment.user_id]);
+  }
 
   const claim = await q(
     "UPDATE payments SET status = 'PAID' WHERE id = $1 AND status <> 'PAID'",
@@ -124,10 +130,11 @@ export async function handleSubscriptionEvent(
     else if (amt === PRODUCTS.pro.amountUsdcMicros) activeProduct = "pro";
   }
 
-  // Always keep the stored subscription id / status / plan current.
+  // Always keep the stored subscription id / status / plan current, plus auto-capture wallet address if present.
+  const wallet = (data as any).subscriber || (data as any).subscriber_address || (data as any).user_address || (data as any).wallet_address;
   await q(
-    "UPDATE users SET subscription_id = COALESCE($1, subscription_id), sub_status = $2, plan = $4 WHERE id = $3",
-    [subId ?? null, status || null, user.id, activeProduct]
+    "UPDATE users SET subscription_id = COALESCE($1, subscription_id), sub_status = $2, plan = $4, wallet_address = COALESCE(wallet_address, $5) WHERE id = $3",
+    [subId ?? null, status || null, user.id, activeProduct, wallet || null]
   );
 
   const isCharge =

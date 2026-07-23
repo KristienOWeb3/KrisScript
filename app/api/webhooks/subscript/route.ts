@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   try {
     // "payment.success" is SubScript's documented legacy alias.
     if (event.type === "payment.succeeded" || event.type === "payment.success") {
-      const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference);
+      const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference, event.data);
       if (!result.ok) {
         console.warn("[webhook] payment.succeeded for unknown payment", event.data);
       }

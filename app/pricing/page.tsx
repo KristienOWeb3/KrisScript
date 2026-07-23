@@ -9,11 +9,15 @@ export default function PricingPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
+  const [paygWalletInput, setPaygWalletInput] = useState("");
 
   async function load() {
     const data = await fetch("/api/me").then((r) => r.json());
     if (!data.user) return router.replace("/login");
     setMe(data);
+    if (data.user?.walletAddress) {
+      setPaygWalletInput((prev) => prev || data.user.walletAddress);
+    }
     if (data.user?.subscriptionId || data.user?.subscription_id || data.user?.walletAddress) {
       fetch("/api/billing/sync", { method: "POST" })
         .then((r) => r.json())
@@ -21,7 +25,14 @@ export default function PricingPage() {
           if (s.synced) {
             fetch("/api/me")
               .then((r) => r.json())
-              .then((updated) => updated.user && setMe(updated));
+              .then((updated) => {
+                if (updated.user) {
+                  setMe(updated);
+                  if (updated.user.walletAddress) {
+                    setPaygWalletInput((prev) => prev || updated.user.walletAddress);
+                  }
+                }
+              });
           }
         })
         .catch(() => {});
@@ -66,7 +77,7 @@ export default function PricingPage() {
     const res = await fetch("/api/billing/payg", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
+      body: JSON.stringify({ enabled, walletAddress: paygWalletInput.trim() }),
     });
     const data = await res.json();
     if (!res.ok) setError(data.error);
@@ -276,40 +287,67 @@ export default function PricingPage() {
                 <li>Charged per message via report-usage</li>
                 <li>Used only when no plan is active</li>
               </ul>
-              {user?.walletAddress ? (
-                <>
-                  <div style={{ margin: "10px 0 14px", padding: "8px 10px", background: "rgba(101,217,143,0.08)", border: "1px solid rgba(101,217,143,0.2)", borderRadius: "6px", fontSize: "0.8rem", wordBreak: "break-all" }}>
-                    <strong style={{ color: "#65d98f", display: "block", marginBottom: "2px" }}>SubScript Vault Address:</strong>
-                    <code>{user.walletAddress}</code>
-                  </div>
-                  {user?.paygEnabled ? (
-                    <>
-                      <p className="muted mt" style={{ marginTop: 0 }}>
-                        Enabled - accrued this cycle: <strong>${user.paygAccrued}</strong>
-                      </p>
-                      <button
-                        className="btn secondary"
-                        onClick={() => setPayg(false)}
-                        disabled={busy !== ""}
-                      >
-                        Disable pay-as-you-chat
-                      </button>
-                    </>
-                  ) : (
-                    <button className="btn" onClick={() => setPayg(true)} disabled={busy !== ""}>
-                      {busy === "payg" ? "Saving..." : "Enable pay-as-you-chat"}
+              <div style={{ marginTop: 12, padding: "12px", background: "#10141b", border: "1px solid #232a36", borderRadius: "8px", fontSize: "0.8rem", textAlign: "left" }}>
+                <strong style={{ color: "#65d98f", display: "block", marginBottom: 6 }}>⚡ First-Time PAYG Setup Instructions:</strong>
+                <ol style={{ margin: "0 0 10px 0", paddingLeft: 18, color: "#9ca3af", lineHeight: "1.5" }}>
+                  <li>
+                    Open <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer" style={{ color: "#60a5fa", textDecoration: "underline" }}>SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong> page.
+                  </li>
+                  <li>
+                    Click <strong>&quot;Commit to a service&quot;</strong> and enter Merchant Name: <code style={{ color: "#65d98f", background: "rgba(101,217,143,0.1)", padding: "1px 4px", borderRadius: "3px" }}>Okechukwuanigba.sub</code>.
+                  </li>
+                  <li>
+                    Enter commitment amount (min <strong>$2 USDC</strong>) and commit to activate vault.
+                  </li>
+                  <li>
+                    SubScript auto-links your wallet upon payment, or paste your wallet address below:
+                  </li>
+                </ol>
+
+                <label style={{ display: "block", fontSize: "0.78rem", color: "#9ca3af", marginBottom: 4 }}>SubScript Vault Address:</label>
+                <input
+                  type="text"
+                  placeholder="Paste 0x... wallet address"
+                  value={paygWalletInput}
+                  onChange={(e) => setPaygWalletInput(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    fontSize: "0.82rem",
+                    background: "#080a0d",
+                    border: "1px solid #282e3a",
+                    borderRadius: "6px",
+                    color: "#fff",
+                    marginBottom: 10,
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                {user?.paygEnabled ? (
+                  <>
+                    <p className="muted" style={{ margin: "0 0 8px 0" }}>
+                      Status: <strong style={{ color: "#65d98f" }}>Enabled</strong> - accrued this cycle: <strong>${user.paygAccrued}</strong>
+                    </p>
+                    <button
+                      className="btn secondary small"
+                      style={{ width: "100%" }}
+                      onClick={() => setPayg(false)}
+                      disabled={busy !== ""}
+                    >
+                      {busy === "payg" ? "Updating..." : "Disable pay-as-you-chat"}
                     </button>
-                  )}
-                </>
-              ) : (
-                <button
-                  className="btn secondary"
-                  onClick={() => subscribe("pro")}
-                  disabled={busy !== ""}
-                >
-                  Connect SubScript Vault
-                </button>
-              )}
+                  </>
+                ) : (
+                  <button
+                    className="btn small"
+                    style={{ width: "100%" }}
+                    onClick={() => setPayg(true)}
+                    disabled={busy !== ""}
+                  >
+                    {busy === "payg" ? "Saving..." : "Enable pay-as-you-chat"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
