@@ -159,7 +159,7 @@ export default function PricingPage() {
                     user.planExpiresAt * 1000
                   ).toLocaleString()}`}
               </div>
-              {user.subscription_id && (
+              {(user.subscriptionId || user.subscription_id) && (
                 <button
                   className="btn secondary small"
                   onClick={syncSubScript}
@@ -338,15 +338,15 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {user && user.plan !== "free" && user.subscriptionId && !user.subCancelAtPeriodEnd && (
-            <div style={{ marginTop: 18 }}>
+          {user && user.plan !== "free" && !user.subCancelAtPeriodEnd && (
+            <div style={{ marginTop: 18, display: "flex", gap: "12px", alignItems: "center" }}>
               <button
                 className="btn ghost"
-                style={{ maxWidth: 220, fontSize: "0.82rem" }}
+                style={{ maxWidth: 220, fontSize: "0.82rem", color: "#f87171", borderColor: "rgba(248,113,113,0.3)" }}
                 onClick={cancelSub}
                 disabled={busy !== ""}
               >
-                {busy === "cancel" ? "Cancelling..." : "Cancel on platform"}
+                {busy === "cancel" ? "Cancelling..." : "Cancel Subscription"}
               </button>
             </div>
           )}
