@@ -241,7 +241,17 @@ export async function getSubscription(
   const body = await res.json().catch(() => ({}));
   if (!res.ok) return { status: res.status, subscription: null };
   const list: any[] = body.data || body.subscriptions || (Array.isArray(body) ? body : []);
-  const sub = list.find((s) => s.id === id || s.id === `sub_${id}` || id.includes(s.id));
+  const cleanId = id.toLowerCase().trim();
+  const sub = list.find((s) => {
+    const sId = (s.id || "").toLowerCase();
+    const sSub = (s.subscriber || "").toLowerCase();
+    return (
+      sId === cleanId ||
+      sId === `sub_${cleanId}` ||
+      cleanId.includes(sId) ||
+      (sSub && sSub === cleanId)
+    );
+  });
   return { status: res.status, subscription: sub || null };
 }
 

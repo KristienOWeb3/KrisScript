@@ -171,16 +171,28 @@ export default function PricingPage() {
                     user.planExpiresAt * 1000
                   ).toLocaleString()}`}
               </div>
-              {(user.subscriptionId || user.subscription_id) && (
-                <button
-                  className="btn secondary small"
-                  onClick={syncSubScript}
-                  disabled={busy === "sync"}
-                  style={{ padding: "4px 12px", fontSize: "0.8rem" }}
-                >
-                  {busy === "sync" ? "Syncing..." : "🔄 Sync SubScript status"}
-                </button>
-              )}
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {(user.subscriptionId || user.subscription_id || user.walletAddress) && (
+                  <button
+                    className="btn secondary small"
+                    onClick={syncSubScript}
+                    disabled={busy === "sync"}
+                    style={{ padding: "4px 12px", fontSize: "0.8rem" }}
+                  >
+                    {busy === "sync" ? "Syncing..." : "🔄 Sync SubScript status"}
+                  </button>
+                )}
+                {user.plan !== "free" && !user.subCancelAtPeriodEnd && (
+                  <button
+                    className="btn ghost small"
+                    onClick={cancelSub}
+                    disabled={busy !== ""}
+                    style={{ padding: "4px 12px", fontSize: "0.8rem", color: "#f87171", borderColor: "rgba(248,113,113,0.4)" }}
+                  >
+                    {busy === "cancel" ? "Cancelling..." : "Cancel Plan"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {user && user.subCancelAtPeriodEnd && user.plan !== "free" && (
