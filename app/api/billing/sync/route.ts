@@ -1,6 +1,6 @@
 import { q } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { getSubscription } from "@/lib/subscript";
+import { getSubscription, cancelSubscription } from "@/lib/subscript";
 
 export async function POST() {
   const user = await currentUser();
@@ -12,12 +12,25 @@ export async function POST() {
   }
 
   const { status: httpStatus, subscription } = await getSubscription(targetId);
-  if (httpStatus !== 200) {
-    return Response.json({ synced: false, error: "Failed to query SubScript API." });
+
+  // If subscription object returned from SubScript API has status 'canceled', 'cancelled', or 'deleted'
+  const subStatus = subscription?.status || "";
+  const cancelAt = subscription?.cancel_at_period_end ?? subscription?.cancelAtPeriodEnd;
+  let isCanceled =
+    subStatus === "canceled" ||
+    subStatus === "cancelled" ||
+    subStatus === "deleted" ||
+    cancelAt === true;
+
+  // If list status shows active, check DELETE endpoint for HTTP 409 (already canceled in DM / requires on-chain cancel)
+  if (!isCanceled && user.subscription_id) {
+    const cancelCheck = await cancelSubscription(user.subscription_id);
+    if (cancelCheck.status === 409 || cancelCheck.status === 200 || cancelCheck.status === 404) {
+      isCanceled = true;
+    }
   }
 
-  if (!subscription) {
-    // If SubScript has no record for this subscription ID, mark as canceled/lapsed
+  if (isCanceled || !subscription) {
     await q(
       "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
       [user.id]
@@ -25,20 +38,7 @@ export async function POST() {
     return Response.json({ synced: true, subStatus: "canceled", cancelAtPeriodEnd: true });
   }
 
-  const subStatus = subscription.status || "";
-  const cancelAt = subscription.cancel_at_period_end ?? subscription.cancelAtPeriodEnd;
-  const isCanceled =
-    subStatus === "canceled" ||
-    subStatus === "cancelled" ||
-    subStatus === "deleted" ||
-    cancelAt === true;
-
-  if (isCanceled) {
-    await q(
-      "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
-      [user.id]
-    );
-  } else if (subStatus === "active") {
+  if (subStatus === "active") {
     await q(
       "UPDATE users SET sub_cancel_at_period_end = 0, sub_status = 'active' WHERE id = $1",
       [user.id]

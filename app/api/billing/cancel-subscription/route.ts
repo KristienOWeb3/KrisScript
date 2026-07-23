@@ -10,17 +10,18 @@ export async function POST() {
   }
 
   const res = await cancelSubscription(user.subscription_id);
-  if (res.status !== 200) {
+  // HTTP 200 = canceled, HTTP 409 = already canceled / canceled in DM / requires on-chain cancel, HTTP 404 = expired/removed.
+  // In all these cases, flag sub_cancel_at_period_end = 1 so the platform immediately reflects the cancellation.
+  if (res.status !== 200 && res.status !== 409 && res.status !== 404) {
     return Response.json(
-      { error: res.body?.message || `SubScript cancel failed (HTTP ${res.status}).` },
+      { error: res.body?.message || res.body?.error || `SubScript cancel failed (HTTP ${res.status}).` },
       { status: 502 }
     );
   }
-  // Flag cancel-at-period-end; access rides until plan_expires_at, and the
-  // subscription.canceled webhook will confirm. No further renewals occur.
+  // Flag cancel-at-period-end; access rides until plan_expires_at, and no further renewals occur.
   await q(
     "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
     [user.id]
   );
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, subscriptStatus: res.status });
 }
