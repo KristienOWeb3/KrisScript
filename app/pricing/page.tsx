@@ -211,20 +211,6 @@ export default function PricingPage() {
             </div>
           </div>
 
-          <div className="notice-box">
-            <label style={{ margin: "0 0 4px", fontSize: "0.85rem" }}>SubScript Identity / DNS</label>
-            {user?.walletAddress ? (
-              <p style={{ margin: 0, fontWeight: 600, wordBreak: "break-all" }}>
-                ⚡ {user.subscriptDns || `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}.subscript`}{" "}
-                <span style={{ color: "#65d98f", fontSize: "0.8rem", fontWeight: 400 }}>(SubScript DNS Verified - {user.walletAddress.slice(0, 6)}...{user.walletAddress.slice(-4)})</span>
-              </p>
-            ) : (
-              <p className="muted" style={{ margin: 0 }}>
-                No SubScript DNS connected yet. SubScript automatically links your SubScript DNS / Arc wallet during checkout.
-              </p>
-            )}
-          </div>
-
           <div className="plans">
             <div className="plan-card">
               <h3>Free</h3>
@@ -291,24 +277,30 @@ export default function PricingPage() {
                 <li>Used only when no plan is active</li>
               </ul>
               {user?.walletAddress ? (
-                user?.paygEnabled ? (
-                  <>
-                    <p className="muted mt">
-                      Enabled - accrued this cycle: <strong>${user.paygAccrued}</strong>
-                    </p>
-                    <button
-                      className="btn secondary"
-                      onClick={() => setPayg(false)}
-                      disabled={busy !== ""}
-                    >
-                      Disable pay-as-you-chat
+                <>
+                  <div style={{ margin: "10px 0 14px", padding: "8px 10px", background: "rgba(101,217,143,0.08)", border: "1px solid rgba(101,217,143,0.2)", borderRadius: "6px", fontSize: "0.8rem", wordBreak: "break-all" }}>
+                    <strong style={{ color: "#65d98f", display: "block", marginBottom: "2px" }}>SubScript Vault Address:</strong>
+                    <code>{user.walletAddress}</code>
+                  </div>
+                  {user?.paygEnabled ? (
+                    <>
+                      <p className="muted mt" style={{ marginTop: 0 }}>
+                        Enabled - accrued this cycle: <strong>${user.paygAccrued}</strong>
+                      </p>
+                      <button
+                        className="btn secondary"
+                        onClick={() => setPayg(false)}
+                        disabled={busy !== ""}
+                      >
+                        Disable pay-as-you-chat
+                      </button>
+                    </>
+                  ) : (
+                    <button className="btn" onClick={() => setPayg(true)} disabled={busy !== ""}>
+                      {busy === "payg" ? "Saving..." : "Enable pay-as-you-chat"}
                     </button>
-                  </>
-                ) : (
-                  <button className="btn" onClick={() => setPayg(true)} disabled={busy !== ""}>
-                    {busy === "payg" ? "Saving..." : "Enable pay-as-you-chat"}
-                  </button>
-                )
+                  )}
+                </>
               ) : (
                 <button
                   className="btn secondary"
