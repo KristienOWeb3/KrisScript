@@ -48,6 +48,16 @@ export default function PricingPage() {
     load();
   }
 
+  async function syncSubScript() {
+    setBusy("sync");
+    setError("");
+    const res = await fetch("/api/billing/sync", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) setError(data.error || "Failed to sync status from SubScript.");
+    setBusy("");
+    load();
+  }
+
   async function setPayg(enabled: boolean) {
     setBusy("payg");
     setError("");
@@ -135,18 +145,30 @@ export default function PricingPage() {
             </div>
           </div>
           {user && (
-            <div className="notice-box" style={{ marginTop: 0 }}>
-              Current plan:{" "}
-              <strong>
-                {user.plan === "promax" ? "Pro Max" : user.plan === "pro" ? "Pro" : "Free"}
-              </strong>
-              {user.subStatus && user.plan !== "free" && (
-                <> - subscription <strong>{user.subStatus}</strong></>
+            <div className="notice-box" style={{ marginTop: 0, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                Current plan:{" "}
+                <strong>
+                  {user.plan === "promax" ? "Pro Max" : user.plan === "pro" ? "Pro" : "Free"}
+                </strong>
+                {user.subStatus && user.plan !== "free" && (
+                  <> - subscription <strong>{user.subStatus}</strong></>
+                )}
+                {user.planExpiresAt &&
+                  ` - ${user.subCancelAtPeriodEnd ? "ends" : "renews"} ${new Date(
+                    user.planExpiresAt * 1000
+                  ).toLocaleString()}`}
+              </div>
+              {user.subscription_id && (
+                <button
+                  className="btn secondary small"
+                  onClick={syncSubScript}
+                  disabled={busy === "sync"}
+                  style={{ padding: "4px 12px", fontSize: "0.8rem" }}
+                >
+                  {busy === "sync" ? "Syncing..." : "🔄 Sync SubScript status"}
+                </button>
               )}
-              {user.planExpiresAt &&
-                ` - ${user.subCancelAtPeriodEnd ? "ends" : "renews"} ${new Date(
-                  user.planExpiresAt * 1000
-                ).toLocaleString()}`}
             </div>
           )}
           {user && user.subCancelAtPeriodEnd && user.plan !== "free" && (

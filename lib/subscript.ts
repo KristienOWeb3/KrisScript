@@ -229,6 +229,19 @@ export async function cancelSubscription(
   return { status: res.status, body };
 }
 
+/** Fetch a subscription by ID (GET /api/v1/subscriptions?id=). */
+export async function getSubscription(
+  id: string
+): Promise<{ status: number; subscription?: any }> {
+  if (!hasRealKey()) return { status: 200, subscription: { id, status: "active", devMode: true } };
+  const res = await fetch(`${BASE}/api/v1/subscriptions?id=${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+  });
+  const body = await res.json().catch(() => ({}));
+  return { status: res.status, subscription: body.subscription || body };
+}
+
 /**
  * Report metered usage against a customer's vault
  * (POST /api/user/vault/report-usage). Returns HTTP status + parsed body;
