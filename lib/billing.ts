@@ -152,8 +152,10 @@ export async function handleSubscriptionEvent(
 
   const isCanceled =
     type === "subscription.canceled" ||
+    type === "subscription.deleted" ||
     status === "canceled" ||
     status === "cancelled" ||
+    status === "deleted" ||
     data.cancel_at_period_end === true ||
     data.cancelAtPeriodEnd === true;
 

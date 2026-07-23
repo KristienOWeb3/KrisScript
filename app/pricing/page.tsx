@@ -14,6 +14,18 @@ export default function PricingPage() {
     const data = await fetch("/api/me").then((r) => r.json());
     if (!data.user) return router.replace("/login");
     setMe(data);
+    if (data.user?.subscriptionId || data.user?.subscription_id || data.user?.walletAddress) {
+      fetch("/api/billing/sync", { method: "POST" })
+        .then((r) => r.json())
+        .then((s) => {
+          if (s.synced) {
+            fetch("/api/me")
+              .then((r) => r.json())
+              .then((updated) => updated.user && setMe(updated));
+          }
+        })
+        .catch(() => {});
+    }
   }
   useEffect(() => {
     load();
