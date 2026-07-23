@@ -229,17 +229,20 @@ export async function cancelSubscription(
   return { status: res.status, body };
 }
 
-/** Fetch a subscription by ID (GET /api/v1/subscriptions?id=). */
+/** Fetch a subscription by ID from Subscript API (GET /api/v1/subscriptions). */
 export async function getSubscription(
   id: string
 ): Promise<{ status: number; subscription?: any }> {
   if (!hasRealKey()) return { status: 200, subscription: { id, status: "active", devMode: true } };
-  const res = await fetch(`${BASE}/api/v1/subscriptions?id=${encodeURIComponent(id)}`, {
+  const res = await fetch(`${BASE}/api/v1/subscriptions`, {
     method: "GET",
     headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
   });
   const body = await res.json().catch(() => ({}));
-  return { status: res.status, subscription: body.subscription || body };
+  if (!res.ok) return { status: res.status, subscription: null };
+  const list: any[] = body.data || body.subscriptions || (Array.isArray(body) ? body : []);
+  const sub = list.find((s) => s.id === id || s.id === `sub_${id}` || id.includes(s.id));
+  return { status: res.status, subscription: sub || null };
 }
 
 /**
