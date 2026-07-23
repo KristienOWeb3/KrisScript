@@ -77,18 +77,6 @@ export default function ActivatePage() {
           <div className="payment-method-title">Choose payment method</div>
           <div className="payment-method-selector">
             <div
-              className={`payment-method-option ${paymentMethod === "card" ? "selected" : ""}`}
-              onClick={() => setPaymentMethod("card")}
-            >
-              <div className="payment-method-radio" />
-              <div className="payment-method-icon">💳</div>
-              <div className="payment-method-details">
-                <strong>Card</strong>
-                <span>Credit / Debit Card</span>
-              </div>
-            </div>
-
-            <div
               className={`payment-method-option ${paymentMethod === "subscript" ? "selected" : ""}`}
               onClick={() => setPaymentMethod("subscript")}
             >
@@ -96,7 +84,20 @@ export default function ActivatePage() {
               <div className="payment-method-icon">⚡</div>
               <div className="payment-method-details">
                 <strong>SubScript</strong>
-                <span>USDC on Arc Web3</span>
+                <span>USDC on Arc Web3 (Active)</span>
+              </div>
+            </div>
+
+            <div
+              className="payment-method-option disabled"
+              style={{ opacity: 0.5, cursor: "not-allowed" }}
+              title="Card payment method coming soon"
+            >
+              <div className="payment-method-radio" />
+              <div className="payment-method-icon">💳</div>
+              <div className="payment-method-details">
+                <strong>Card</strong>
+                <span>Credit / Debit Card (Disabled)</span>
               </div>
             </div>
           </div>

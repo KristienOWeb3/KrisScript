@@ -212,14 +212,15 @@ export default function PricingPage() {
           </div>
 
           <div className="notice-box">
-            <label style={{ margin: "0 0 4px", fontSize: "0.85rem" }}>SubScript Connected Wallet</label>
+            <label style={{ margin: "0 0 4px", fontSize: "0.85rem" }}>SubScript Identity / DNS</label>
             {user?.walletAddress ? (
               <p style={{ margin: 0, fontWeight: 600, wordBreak: "break-all" }}>
-                🔒 {user.walletAddress} <span style={{ color: "#65d98f", fontSize: "0.8rem", fontWeight: 400 }}>(Verified via SubScript)</span>
+                ⚡ {user.subscriptDns || `${user.walletAddress.slice(0, 6)}...${user.walletAddress.slice(-4)}.subscript`}{" "}
+                <span style={{ color: "#65d98f", fontSize: "0.8rem", fontWeight: 400 }}>(SubScript DNS Verified - {user.walletAddress.slice(0, 6)}...{user.walletAddress.slice(-4)})</span>
               </p>
             ) : (
               <p className="muted" style={{ margin: 0 }}>
-                No wallet connected yet. SubScript automatically connects and verifies your Arc wallet during checkout.
+                No SubScript DNS connected yet. SubScript automatically links your SubScript DNS / Arc wallet during checkout.
               </p>
             )}
           </div>
@@ -331,7 +332,7 @@ export default function PricingPage() {
               <a
                 className="btn secondary"
                 style={{ width: "auto", margin: 0 }}
-                href="https://www.subscriptonarc.com"
+                href="https://dashboard.subscriptonarc.com/user"
                 target="_blank"
                 rel="noreferrer"
               >

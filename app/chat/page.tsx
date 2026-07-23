@@ -33,9 +33,8 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, blocked]);
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  async function sendText(textToSend: string) {
+    const text = textToSend.trim();
     if (!text || busy) return;
     setBusy(true);
     setBlocked(null);
@@ -49,7 +48,6 @@ export default function ChatPage() {
     });
     const data = await res.json();
     if (!res.ok) {
-      // Remove the optimistic message; it was not accepted/billed.
       setMessages((m) => m.slice(0, -1));
       setBlocked({ error: data.error || "Something went wrong.", reason: data.reason });
       setInput(text);
@@ -62,6 +60,11 @@ export default function ChatPage() {
     }
     setBusy(false);
     loadMe();
+  }
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    await sendText(input);
   }
 
   async function logout() {
@@ -92,9 +95,6 @@ export default function ChatPage() {
           </a>
           <a className="nav-link" href="/pricing">
             Billing <span>{planLabel}</span>
-          </a>
-          <a className="nav-link" href="/billing/success">
-            Payment status <span>Audit</span>
           </a>
         </nav>
         <div className="rail-section">
@@ -152,9 +152,27 @@ export default function ChatPage() {
                   </p>
                 </div>
                 <div className="prompt-row">
-                  <div className="prompt-chip">Explain how my current plan is billed.</div>
-                  <div className="prompt-chip">Draft a SubScript webhook test checklist.</div>
-                  <div className="prompt-chip">Compare PAYG vs weekly plans for this app.</div>
+                  <div
+                    className="prompt-chip"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => sendText("Explain how my current plan is billed.")}
+                  >
+                    Explain how my current plan is billed.
+                  </div>
+                  <div
+                    className="prompt-chip"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => sendText("Draft a SubScript webhook test checklist.")}
+                  >
+                    Draft a SubScript webhook test checklist.
+                  </div>
+                  <div
+                    className="prompt-chip"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => sendText("Compare PAYG vs weekly plans for this app.")}
+                  >
+                    Compare PAYG vs weekly plans for this app.
+                  </div>
                 </div>
               </section>
             )}
