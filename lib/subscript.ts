@@ -167,7 +167,7 @@ export async function createSubscription(opts: {
     // SubScript's live DM plan publication is not supported by sandbox/test
     // keys. Keep recurring checkout testable with sk_test_* keys, and only
     // publish into the DM plan flow when using a live merchant key.
-    publishToDm: isLiveKey ? (opts.publishToDm ?? false) : false,
+    publishToDm: key.startsWith("sk_live_") ? (opts.publishToDm ?? false) : false,
     ...(opts.subscriber
       ? { subscriber: opts.subscriber, externalReference: opts.externalReference }
       : {}),
