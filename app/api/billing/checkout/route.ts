@@ -22,6 +22,23 @@ export async function POST(req: Request) {
     return Response.json({ error: "Pay the $1 activation fee first." }, { status: 402 });
   }
 
+  // Prevent downgrades: if user is currently on a higher active plan, reject lower plan requests.
+  const PLAN_LEVELS: Record<string, number> = { free: 0, pro: 1, promax: 2 };
+  const now = Math.floor(Date.now() / 1000);
+  const currentPlan = user.plan || "free";
+  const currentPlanActive =
+    (currentPlan === "pro" || currentPlan === "promax") && (user.plan_expires_at ?? 0) > now;
+  const currentLevel = currentPlanActive ? (PLAN_LEVELS[currentPlan] ?? 0) : 0;
+  const requestedLevel = PLAN_LEVELS[product] ?? 0;
+
+  if (requestedLevel < currentLevel) {
+    const currentName = currentPlan === "promax" ? "Pro Max" : "Pro";
+    return Response.json(
+      { error: `You are currently on the ${currentName} plan. Downgrading to a lower plan is not allowed.` },
+      { status: 400 }
+    );
+  }
+
   const spec = PRODUCTS[product];
   let subscriberAddress: string | undefined;
   if (spec.kind === "subscription") {

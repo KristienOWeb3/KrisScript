@@ -86,6 +86,14 @@ export default function PricingPage() {
   }
 
   const user = me?.user;
+  const PLAN_LEVELS: Record<string, number> = { free: 0, pro: 1, promax: 2 };
+  const currentPlanActive =
+    (user?.plan === "pro" || user?.plan === "promax") &&
+    (user?.planExpiresAt ?? 0) > Math.floor(Date.now() / 1000);
+  const userLevel = currentPlanActive ? (PLAN_LEVELS[user?.plan] ?? 0) : 0;
+
+  const isHigherPlanActive = (p: "pro" | "promax") => userLevel > PLAN_LEVELS[p];
+
   const activeSub = (p: string) =>
     user?.plan === p &&
     (user?.subStatus === "active" || user?.planExpiresAt) &&
@@ -93,6 +101,7 @@ export default function PricingPage() {
 
   function planButtonLabel(p: "pro" | "promax", price: string) {
     if (busy === p) return "Creating subscription...";
+    if (isHigherPlanActive(p)) return "Included in Pro Max";
     if (user?.plan === p && user?.subCancelAtPeriodEnd) return `Re-subscribe - ${price}`;
     if (activeSub(p)) return "Subscribed";
     return `Subscribe - ${price}`;
@@ -250,7 +259,7 @@ export default function PricingPage() {
               <button
                 className="btn"
                 onClick={() => subscribe("pro")}
-                disabled={busy !== "" || activeSub("pro")}
+                disabled={busy !== "" || activeSub("pro") || isHigherPlanActive("pro")}
               >
                 {planButtonLabel("pro", "$2/wk")}
               </button>
