@@ -17,6 +17,7 @@ export default function ChatPage() {
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<{ error: string; reason?: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
 
@@ -85,7 +86,6 @@ export default function ChatPage() {
         copy[copy.length - 1] = { ...copy[copy.length - 1], billed: data.billed };
         return [...copy, { role: "assistant", content: data.reply }];
       });
-      // Refresh recents list after sending
       loadThread(data.threadId || activeThreadId);
     }
     setBusy(false);
@@ -115,20 +115,47 @@ export default function ChatPage() {
   );
 
   return (
-    <div className="app-shell chat-shell wireframe-layout">
-      {/* SIDEBAR DRAWER OVERLAY & PANEL */}
+    <div className={`app-shell chat-shell wireframe-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      {/* SIDEBAR DRAWER OVERLAY */}
       {sidebarOpen && (
         <div className="drawer-overlay" onClick={() => setSidebarOpen(false)} />
       )}
-      <aside className={`rail ${sidebarOpen ? "open" : ""}`}>
+
+      {/* LEFT SIDEBAR (WIREFRAME DESKTOP + MOBILE) */}
+      <aside className={`rail ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="rail-header">
           <div className="rail-brand">
-            <div className="mark">KS</div>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z"
+                fill="url(#sidebarSparkGrad)"
+              />
+              <defs>
+                <linearGradient id="sidebarSparkGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#60a5fa" />
+                  <stop offset="0.5" stopColor="#a855f7" />
+                  <stop offset="1" stopColor="#f43f5e" />
+                </linearGradient>
+              </defs>
+            </svg>
             <div className="brand-title">Kris&apos;s Script</div>
           </div>
-          <button className="icon-btn drawer-close" onClick={() => setSidebarOpen(false)} title="Close menu">
-            ✕
-          </button>
+          <div className="rail-header-actions">
+            <button
+              className="icon-btn collapse-toggle-btn"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title="Collapse sidebar"
+            >
+              ◧
+            </button>
+            <button
+              className="icon-btn drawer-close"
+              onClick={() => setSidebarOpen(false)}
+              title="Close menu"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="drawer-actions">
@@ -161,7 +188,6 @@ export default function ChatPage() {
                   className={`recent-item ${activeThreadId === r.threadId ? "active" : ""}`}
                   onClick={() => selectThread(r.threadId)}
                 >
-                  <span className="recent-icon">💬</span>
                   <span className="recent-title">{r.title}</span>
                 </button>
               ))
@@ -255,35 +281,21 @@ export default function ChatPage() {
 
       {/* MAIN CHAT AREA */}
       <section className="app-main">
-        {/* TOPBAR HEADER (WIREFRAME 1) */}
+        {/* TOPBAR HEADER */}
         <header className="topbar">
           <div className="topbar-left">
-            <button className="icon-btn hamburger" onClick={() => setSidebarOpen(true)} title="Open Menu">
-              ☰
-            </button>
-            
-            {/* CENTER PLAN SELECTOR / DROPDOWN PILL */}
-            <div className="plan-selector-wrap">
+            {(sidebarCollapsed || !sidebarOpen) && (
               <button
-                className="plan-selector-pill"
-                onClick={() => setPlanDropdownOpen(!planDropdownOpen)}
+                className="icon-btn sidebar-toggle-top"
+                onClick={() => {
+                  if (window.innerWidth <= 900) setSidebarOpen(true);
+                  else setSidebarCollapsed(false);
+                }}
+                title="Open Sidebar"
               >
-                <span>Kris&apos;s Script ({planLabel})</span>
-                <span className="caret">⌄</span>
+                ☰
               </button>
-
-              {planDropdownOpen && (
-                <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                  <div className="dropdown-item header">Current Plan: {planLabel}</div>
-                  <a className="dropdown-item" href="/pricing">
-                    ⚡ Upgrade or Manage Subscription
-                  </a>
-                  <a className="dropdown-item" href="/pricing">
-                    💳 Metered Vault Billing (PAYG)
-                  </a>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="topbar-right">
@@ -297,24 +309,52 @@ export default function ChatPage() {
         <main className="chat-main">
           <div className="chat-messages">
             {messages.length === 0 && (
-              <section className="empty-state wireframe-empty">
-                <div className="logo-spark">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z"
-                      fill="url(#sparkGradient)"
-                    />
-                    <defs>
-                      <linearGradient id="sparkGradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#60a5fa" />
-                        <stop offset="0.5" stopColor="#a855f7" />
-                        <stop offset="1" stopColor="#f43f5e" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-                
+              <section className="empty-state wireframe-empty desktop-hero">
                 <h1 className="hero-heading">What should we focus on?</h1>
+
+                {/* CENTERED DESKTOP FLOATING COMPOSER (WIREFRAME DESKTOP) */}
+                <form className="chat-composer desktop-centered-pill" onSubmit={send}>
+                  <button className="composer-action-btn" type="button" title="Attach / Options">
+                    +
+                  </button>
+
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask Kris"
+                    maxLength={4000}
+                  />
+
+                  {/* EMBEDDED PLAN SELECTOR PILL INSIDE INPUT BAR (EXACT WIREFRAME MATCH) */}
+                  <div className="embedded-plan-wrap">
+                    <button
+                      className="embedded-plan-pill"
+                      type="button"
+                      onClick={() => setPlanDropdownOpen(!planDropdownOpen)}
+                    >
+                      <span className="dot">•</span>
+                      <span>{planLabel}</span>
+                      <span className="caret">⌄</span>
+                    </button>
+
+                    {planDropdownOpen && (
+                      <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+                        <div className="dropdown-item header">Current Plan: {planLabel}</div>
+                        <a className="dropdown-item" href="/pricing">
+                          ⚡ Upgrade or Manage Subscription
+                        </a>
+                        <a className="dropdown-item" href="/pricing">
+                          💳 Metered Vault Billing (PAYG)
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <button className="composer-send-btn" disabled={busy || !input.trim()} title="Send">
+                    ↑
+                  </button>
+                </form>
 
                 <div className="prompt-row">
                   <div
@@ -369,26 +409,52 @@ export default function ChatPage() {
             <div ref={bottomRef} />
           </div>
 
-          {/* FLOATING COMPOSER PILL AT BOTTOM (WIREFRAME 1) */}
-          <div className="chat-composer-wrap">
-            <form className="chat-composer floating-pill" onSubmit={send}>
-              <button className="composer-action-btn" type="button" title="Attach / Options">
-                +
-              </button>
+          {/* FLOATING COMPOSER PILL WHEN ACTIVE MESSAGES EXIST */}
+          {messages.length > 0 && (
+            <div className="chat-composer-wrap">
+              <form className="chat-composer floating-pill" onSubmit={send}>
+                <button className="composer-action-btn" type="button" title="Attach / Options">
+                  +
+                </button>
 
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask Kris"
-                maxLength={4000}
-              />
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask Kris"
+                  maxLength={4000}
+                />
 
-              <button className="composer-send-btn" disabled={busy || !input.trim()} title="Send">
-                ↑
-              </button>
-            </form>
-          </div>
+                <div className="embedded-plan-wrap">
+                  <button
+                    className="embedded-plan-pill"
+                    type="button"
+                    onClick={() => setPlanDropdownOpen(!planDropdownOpen)}
+                  >
+                    <span className="dot">•</span>
+                    <span>{planLabel}</span>
+                    <span className="caret">⌄</span>
+                  </button>
+
+                  {planDropdownOpen && (
+                    <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+                      <div className="dropdown-item header">Current Plan: {planLabel}</div>
+                      <a className="dropdown-item" href="/pricing">
+                        ⚡ Upgrade or Manage Subscription
+                      </a>
+                      <a className="dropdown-item" href="/pricing">
+                        💳 Metered Vault Billing (PAYG)
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <button className="composer-send-btn" disabled={busy || !input.trim()} title="Send">
+                  ↑
+                </button>
+              </form>
+            </div>
+          )}
         </main>
       </section>
     </div>

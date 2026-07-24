@@ -60,9 +60,14 @@ code {
   grid-template-columns: 280px minmax(0, 1fr);
   background: var(--bg);
   position: relative;
+  transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* DRAWER & OVERLAY */
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 0px minmax(0, 1fr);
+}
+
+/* DRAWER & SIDEBAR */
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -76,13 +81,21 @@ code {
   top: 0;
   height: 100vh;
   border-right: 1px solid var(--line);
-  background: #0d121c;
+  background: #0e131d;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   z-index: 100;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  overflow: hidden;
+}
+
+.rail.collapsed {
+  transform: translateX(-100%);
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
 }
 
 .rail-header {
@@ -98,22 +111,25 @@ code {
   gap: 10px;
 }
 
-.mark {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  color: white;
-  font-weight: 800;
-  font-size: 0.9rem;
-}
-
 .brand-title {
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.rail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collapse-toggle-btn {
+  font-size: 1.1rem;
+  opacity: 0.75;
+}
+
+.collapse-toggle-btn:hover {
+  opacity: 1;
 }
 
 .drawer-close {
@@ -129,10 +145,10 @@ code {
 
 .new-chat-btn {
   width: 100%;
-  height: 48px;
+  height: 46px;
   border: 1px solid var(--line);
-  border-radius: 24px;
-  background: #18202d;
+  border-radius: 23px;
+  background: #19202d;
   color: #fff;
   font-size: 0.95rem;
   font-weight: 600;
@@ -237,11 +253,6 @@ code {
   color: #fff;
 }
 
-.recent-icon {
-  font-size: 0.92rem;
-  opacity: 0.7;
-}
-
 .recent-title {
   white-space: nowrap;
   overflow: hidden;
@@ -324,7 +335,7 @@ code {
   color: white;
 }
 
-/* PROFILE & ACCOUNT MODAL (WIREFRAME 3) */
+/* PROFILE & ACCOUNT MODAL */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -414,7 +425,7 @@ code {
   background: rgba(255, 123, 114, 0.22) !important;
 }
 
-/* TOPBAR HEADER (WIREFRAME 1) */
+/* TOPBAR HEADER */
 .app-main {
   min-width: 0;
   min-height: 100vh;
@@ -424,14 +435,12 @@ code {
 
 .topbar {
   min-height: 56px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(11, 15, 23, 0.88);
-  backdrop-filter: blur(14px);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 16px;
+  padding: 0 20px;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -461,46 +470,53 @@ code {
   border-color: var(--line);
 }
 
-.plan-selector-wrap {
+/* EMBEDDED PLAN SELECTOR INSIDE INPUT PILL (EXACT DESKTOP WIREFRAME) */
+.embedded-plan-wrap {
   position: relative;
 }
 
-.plan-selector-pill {
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 18px;
-  border: 1px solid var(--line);
-  background: #171d2b;
+.embedded-plan-pill {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #202736;
   color: #fff;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
-.plan-selector-pill:hover {
-  background: #202838;
+.embedded-plan-pill:hover {
+  background: #2b3447;
 }
 
-.plan-selector-pill .caret {
+.embedded-plan-pill .dot {
+  color: #3b82f6;
+  font-size: 1rem;
+  line-height: 0;
+}
+
+.embedded-plan-pill .caret {
   font-size: 0.75rem;
   opacity: 0.7;
 }
 
 .plan-dropdown-menu {
   position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  bottom: calc(100% + 8px);
+  right: 0;
   width: 260px;
   background: #141924;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   padding: 6px;
   box-shadow: var(--shadow);
-  z-index: 50;
+  z-index: 150;
 }
 
 .dropdown-item {
@@ -526,7 +542,7 @@ code {
   margin-bottom: 4px;
 }
 
-/* MAIN CHAT CANVAS & EMPTY STATE */
+/* MAIN CHAT CANVAS & DESKTOP HERO */
 .chat-main {
   flex: 1;
   min-height: 0;
@@ -544,50 +560,59 @@ code {
   gap: 16px;
 }
 
-.wireframe-empty {
-  width: min(640px, 100%);
+.wireframe-empty.desktop-hero {
+  width: min(780px, 100%);
   margin: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 20px;
-  padding: 20px 0;
-}
-
-.logo-spark {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
-  background: radial-gradient(circle, rgba(96, 165, 250, 0.15), transparent 70%);
-  display: grid;
-  place-items: center;
-  filter: drop-shadow(0 0 16px rgba(168, 85, 247, 0.35));
+  gap: 28px;
+  padding: 40px 0;
 }
 
 .hero-heading {
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  color: #fff;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #e2e8f0;
+}
+
+/* CENTERED DESKTOP FLOATING COMPOSER */
+.chat-composer.desktop-centered-pill {
+  width: 100%;
+  min-height: 60px;
+  background: #161c28;
+  border: 1px solid #2b3548;
+  border-radius: 30px;
+  padding: 8px 12px 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+
+.chat-composer.desktop-centered-pill:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .prompt-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   margin-top: 10px;
 }
 
 .prompt-chip {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #131824;
   color: #d1d5db;
-  padding: 14px;
-  font-size: 0.84rem;
-  line-height: 1.4;
+  padding: 16px;
+  font-size: 0.86rem;
+  line-height: 1.42;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -632,7 +657,7 @@ code {
   font-size: 0.72rem;
 }
 
-/* FLOATING COMPOSER PILL AT BOTTOM (WIREFRAME 1) */
+/* FLOATING COMPOSER PILL AT BOTTOM WHEN MESSAGES EXIST */
 .chat-composer-wrap {
   position: absolute;
   bottom: 0;
@@ -645,7 +670,7 @@ code {
 
 .chat-composer.floating-pill {
   pointer-events: auto;
-  width: min(720px, 100%);
+  width: min(780px, 100%);
   margin: 0 auto;
   min-height: 56px;
   background: #161c28;
@@ -682,7 +707,7 @@ code {
   background: #2d384d;
 }
 
-.chat-composer.floating-pill input {
+.chat-composer input {
   flex: 1;
   height: 40px;
   background: transparent;
@@ -693,7 +718,7 @@ code {
   outline: none;
 }
 
-.chat-composer.floating-pill input::placeholder {
+.chat-composer input::placeholder {
   color: #64748b;
   font-weight: 450;
 }
@@ -902,6 +927,10 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .rail {
     position: fixed;
     top: 0;
@@ -914,10 +943,16 @@ code {
 
   .rail.open {
     transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .drawer-close {
     display: grid;
+  }
+
+  .collapse-toggle-btn {
+    display: none;
   }
 
   .plans {
