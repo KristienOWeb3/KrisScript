@@ -4,14 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
+type RecentThread = { threadId: string; title: string; createdAt: number };
 
 export default function ChatPage() {
   const router = useRouter();
   const [me, setMe] = useState<any>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [recents, setRecents] = useState<RecentThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<{ error: string; reason?: string } | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   async function loadMe() {
@@ -21,17 +29,36 @@ export default function ChatPage() {
     setMe(data);
   }
 
+  async function loadThread(threadId?: string | null) {
+    const url = threadId ? `/api/chat?thread_id=${encodeURIComponent(threadId)}` : "/api/chat";
+    const data = await fetch(url).then((r) => r.json());
+    if (data.messages) setMessages(data.messages);
+    if (data.recents) setRecents(data.recents);
+    if (data.activeThreadId !== undefined) setActiveThreadId(data.activeThreadId);
+  }
+
   useEffect(() => {
     loadMe();
-    fetch("/api/chat")
-      .then((r) => r.json())
-      .then((d) => d.messages && setMessages(d.messages));
+    loadThread(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, blocked]);
+
+  function startNewChat() {
+    setActiveThreadId(`thread_${Math.random().toString(36).substring(2, 10)}`);
+    setMessages([]);
+    setBlocked(null);
+    setSidebarOpen(false);
+  }
+
+  function selectThread(tId: string) {
+    setActiveThreadId(tId);
+    loadThread(tId);
+    setSidebarOpen(false);
+  }
 
   async function sendText(textToSend: string) {
     const text = textToSend.trim();
@@ -44,7 +71,7 @@ export default function ChatPage() {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, threadId: activeThreadId }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -52,11 +79,14 @@ export default function ChatPage() {
       setBlocked({ error: data.error || "Something went wrong.", reason: data.reason });
       setInput(text);
     } else {
+      if (data.threadId) setActiveThreadId(data.threadId);
       setMessages((m) => {
         const copy = [...m];
         copy[copy.length - 1] = { ...copy[copy.length - 1], billed: data.billed };
         return [...copy, { role: "assistant", content: data.reply }];
       });
+      // Refresh recents list after sending
+      loadThread(data.threadId || activeThreadId);
     }
     setBusy(false);
     loadMe();
@@ -78,97 +108,229 @@ export default function ChatPage() {
   const badgeClass =
     user?.plan === "promax" ? "promax" : user?.plan === "pro" ? "pro" : "free";
 
+  const userInitials = user?.email ? user.email.charAt(0).toUpperCase() : "K";
+
+  const filteredRecents = recents.filter((r) =>
+    r.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="app-shell chat-shell">
-      <aside className="rail">
-        <div className="rail-brand">
-          <div className="mark">KS</div>
-          <div className="brand-copy">
+    <div className="app-shell chat-shell wireframe-layout">
+      {/* SIDEBAR DRAWER OVERLAY & PANEL */}
+      {sidebarOpen && (
+        <div className="drawer-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+      <aside className={`rail ${sidebarOpen ? "open" : ""}`}>
+        <div className="rail-header">
+          <div className="rail-brand">
+            <div className="mark">KS</div>
             <div className="brand-title">Kris&apos;s Script</div>
-            <div className="brand-meta">DeepSeek + SubScript</div>
+          </div>
+          <button className="icon-btn drawer-close" onClick={() => setSidebarOpen(false)} title="Close menu">
+            ✕
+          </button>
+        </div>
+
+        <div className="drawer-actions">
+          <button className="new-chat-btn" onClick={startNewChat}>
+            <span className="btn-icon">✏️</span>
+            <span>New chat</span>
+          </button>
+
+          <div className="search-box">
+            <span className="search-icon">🔍</span>
+            <input
+              type="text"
+              placeholder="Search chats"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
-        <nav className="rail-section">
-          <div className="rail-label">Workspace</div>
-          <a className="nav-link active" href="/chat">
-            Chat <span>Live</span>
-          </a>
-          <a className="nav-link" href="/pricing">
-            Billing <span>{planLabel}</span>
-          </a>
-        </nav>
-        <div className="rail-section">
-          <div className="rail-label">Current user</div>
-          <div className="prompt-chip">{user?.email ?? "Loading account..."}</div>
-          <div className="status-row">
-            {me?.devMode && <span className="badge dev">DEV</span>}
-            {user && <span className={`badge ${badgeClass}`}>{planLabel}</span>}
-            {user?.paygEnabled && user?.plan === "free" && (
-              <span className="badge payg">PAYG ${user.paygAccrued}</span>
+
+        {/* RECENTS SECTION ONLY (Strict rule: No notebooks, no image/video) */}
+        <div className="rail-section recents-section">
+          <div className="rail-label">Recents</div>
+          <div className="recents-list">
+            {filteredRecents.length === 0 ? (
+              <div className="empty-recents">No recent chats</div>
+            ) : (
+              filteredRecents.map((r) => (
+                <button
+                  key={r.threadId}
+                  className={`recent-item ${activeThreadId === r.threadId ? "active" : ""}`}
+                  onClick={() => selectThread(r.threadId)}
+                >
+                  <span className="recent-icon">💬</span>
+                  <span className="recent-title">{r.title}</span>
+                </button>
+              ))
             )}
           </div>
         </div>
-        <div className="rail-bottom">
-          <a className="btn secondary small" href="/pricing">
-            Manage billing
-          </a>
-          <button className="btn ghost small" onClick={logout}>
-            Log out
+
+        {/* BOTTOM USER PROFILE BAR */}
+        <div className="rail-bottom profile-bar" onClick={() => setProfileModalOpen(true)}>
+          <div className="profile-info">
+            <div className="avatar">{userInitials}</div>
+            <div className="profile-details">
+              <span className="profile-name">{user?.email ? user.email.split("@")[0] : "Kristien"}</span>
+              <span className={`badge ${badgeClass}`}>{planLabel}</span>
+            </div>
+          </div>
+          <button
+            className="icon-btn settings-gear"
+            onClick={(e) => {
+              e.stopPropagation();
+              setProfileModalOpen(true);
+            }}
+            title="Account & Subscription"
+          >
+            ⚙️
           </button>
         </div>
       </aside>
 
-      <section className="app-main">
-        <header className="topbar">
-          <div className="topbar-title">
-            <strong>Chat</strong>
-            <span>Messages are gated by activation, plan state, and metered usage.</span>
+      {/* USER PROFILE & ACCOUNT MODAL (WIREFRAME 3) */}
+      {profileModalOpen && (
+        <div className="modal-overlay" onClick={() => setProfileModalOpen(false)}>
+          <div className="modal-content profile-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="user-email-tag">{user?.email}</span>
+              <button className="icon-btn" onClick={() => setProfileModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <div className="profile-hero">
+              <div className="avatar large">{userInitials}</div>
+              <h2>Hi, {user?.email ? user.email.split("@")[0] : "Kristien"}!</h2>
+            </div>
+
+            <div className="modal-body">
+              <div className="modal-card">
+                <div className="card-row">
+                  <div>
+                    <strong>Manage subscription</strong>
+                    <div className="muted" style={{ fontSize: "0.82rem", marginTop: 2 }}>
+                      Current plan: <strong style={{ color: "#fff" }}>{planLabel}</strong>
+                      {user?.planExpiresAt &&
+                        ` · ${user.subCancelAtPeriodEnd ? "Ends" : "Renews"} ${new Date(
+                          user.planExpiresAt * 1000
+                        ).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <a className="btn small" href="/pricing">
+                    {user?.plan === "free" ? "Upgrade" : "Manage"}
+                  </a>
+                </div>
+              </div>
+
+              <div className="modal-card">
+                <strong style={{ display: "block", marginBottom: 6 }}>Usage & Allowance</strong>
+                <div className="muted" style={{ fontSize: "0.84rem" }}>
+                  {user?.plan === "promax" && "✨ Unlimited DeepSeek messages included"}
+                  {user?.plan === "pro" && `⚡ ${user.todayCount} / ${user.proDailyCap} messages used today`}
+                  {user?.plan === "free" &&
+                    `💬 ${Math.max(0, user.freeCap - user.freeUsed)} of ${user.freeCap} free messages remaining`}
+                </div>
+              </div>
+
+              {user?.paygEnabled && (
+                <div className="modal-card">
+                  <strong style={{ display: "block", marginBottom: 4 }}>Pay-as-you-chat Vault</strong>
+                  <div className="muted" style={{ fontSize: "0.82rem" }}>
+                    Status: <span style={{ color: "#65d98f" }}>Active Metered Billing</span> · Accrued: ${user.paygAccrued}
+                  </div>
+                </div>
+              )}
+
+              <button className="btn secondary danger-btn" onClick={logout} style={{ marginTop: 14 }}>
+                Log out
+              </button>
+            </div>
           </div>
-          <div className="topbar-actions">
-            {user && user.plan === "free" && !user.paygEnabled && (
-              <span className="badge free">
-                {Math.max(0, user.freeCap - user.freeUsed)}/{user.freeCap} free left
-              </span>
-            )}
-            {user?.plan === "pro" && (
-              <span className="badge pro">{user.todayCount}/{user.proDailyCap} today</span>
-            )}
-            {user?.plan === "promax" && <span className="badge promax">Unlimited</span>}
+        </div>
+      )}
+
+      {/* MAIN CHAT AREA */}
+      <section className="app-main">
+        {/* TOPBAR HEADER (WIREFRAME 1) */}
+        <header className="topbar">
+          <div className="topbar-left">
+            <button className="icon-btn hamburger" onClick={() => setSidebarOpen(true)} title="Open Menu">
+              ☰
+            </button>
+            
+            {/* CENTER PLAN SELECTOR / DROPDOWN PILL */}
+            <div className="plan-selector-wrap">
+              <button
+                className="plan-selector-pill"
+                onClick={() => setPlanDropdownOpen(!planDropdownOpen)}
+              >
+                <span>Kris&apos;s Script ({planLabel})</span>
+                <span className="caret">⌄</span>
+              </button>
+
+              {planDropdownOpen && (
+                <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+                  <div className="dropdown-item header">Current Plan: {planLabel}</div>
+                  <a className="dropdown-item" href="/pricing">
+                    ⚡ Upgrade or Manage Subscription
+                  </a>
+                  <a className="dropdown-item" href="/pricing">
+                    💳 Metered Vault Billing (PAYG)
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="topbar-right">
+            <button className="icon-btn new-chat-icon" onClick={startNewChat} title="New Chat">
+              ✏️
+            </button>
           </div>
         </header>
 
+        {/* MAIN MESSAGES CANVAS */}
         <main className="chat-main">
           <div className="chat-messages">
             {messages.length === 0 && (
-              <section className="empty-state">
-                <div className="prompt-card">
-                  <span className="badge pro">READY</span>
-                  <h1 className="brand" style={{ fontSize: "2rem", marginTop: 14 }}>
-                    What should we test?
-                  </h1>
-                  <p className="subtitle">
-                    Ask the assistant normally, or probe a billing edge case. Free users get{" "}
-                    {user?.freeCap ?? 3} messages before Pro, Pro Max, or metered billing is needed.
-                  </p>
+              <section className="empty-state wireframe-empty">
+                <div className="logo-spark">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z"
+                      fill="url(#sparkGradient)"
+                    />
+                    <defs>
+                      <linearGradient id="sparkGradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#60a5fa" />
+                        <stop offset="0.5" stopColor="#a855f7" />
+                        <stop offset="1" stopColor="#f43f5e" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
                 </div>
+                
+                <h1 className="hero-heading">What should we focus on?</h1>
+
                 <div className="prompt-row">
                   <div
                     className="prompt-chip"
-                    style={{ cursor: "pointer" }}
                     onClick={() => sendText("Explain how my current plan is billed.")}
                   >
                     Explain how my current plan is billed.
                   </div>
                   <div
                     className="prompt-chip"
-                    style={{ cursor: "pointer" }}
                     onClick={() => sendText("Draft a SubScript webhook test checklist.")}
                   >
                     Draft a SubScript webhook test checklist.
                   </div>
                   <div
                     className="prompt-chip"
-                    style={{ cursor: "pointer" }}
                     onClick={() => sendText("Compare PAYG vs weekly plans for this app.")}
                   >
                     Compare PAYG vs weekly plans for this app.
@@ -176,6 +338,7 @@ export default function ChatPage() {
                 </div>
               </section>
             )}
+
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
                 {m.content}
@@ -190,7 +353,9 @@ export default function ChatPage() {
                 )}
               </div>
             ))}
+
             {busy && <div className="msg assistant muted">Thinking...</div>}
+
             {blocked && (
               <div className="error-box" style={{ alignSelf: "center", textAlign: "center" }}>
                 {blocked.error}
@@ -204,17 +369,23 @@ export default function ChatPage() {
             <div ref={bottomRef} />
           </div>
 
+          {/* FLOATING COMPOSER PILL AT BOTTOM (WIREFRAME 1) */}
           <div className="chat-composer-wrap">
-            <form className="chat-composer" onSubmit={send}>
+            <form className="chat-composer floating-pill" onSubmit={send}>
+              <button className="composer-action-btn" type="button" title="Attach / Options">
+                +
+              </button>
+
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Message Kris's Script..."
+                placeholder="Ask Kris"
                 maxLength={4000}
               />
-              <button className="btn" disabled={busy || !input.trim()}>
-                Send
+
+              <button className="composer-send-btn" disabled={busy || !input.trim()} title="Send">
+                ↑
               </button>
             </form>
           </div>

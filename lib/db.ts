@@ -26,11 +26,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_cancel_at_period_end INTEGER NOT 
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL,
+  thread_id TEXT,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
   billed TEXT,
   created_at INTEGER NOT NULL DEFAULT (floor(extract(epoch from now()))::integer)
 );
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_id TEXT;
 CREATE TABLE IF NOT EXISTS payments (
   id TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL,
