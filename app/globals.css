@@ -2,6 +2,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 :root {
@@ -26,6 +27,7 @@
 html,
 body {
   min-height: 100vh;
+  width: 100%;
 }
 
 body {
@@ -34,15 +36,22 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: 0;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
   color: var(--text);
   text-decoration: none;
+  touch-action: manipulation;
 }
 
 a:hover {
   color: white;
+}
+
+button {
+  touch-action: manipulation;
 }
 
 code {
@@ -70,7 +79,7 @@ code {
 }
 
 .container {
-  width: min(1180px, 100%);
+  width: min(1200px, 100%);
   margin: 0 auto;
   padding: 28px 24px 40px;
   box-sizing: border-box;
@@ -245,7 +254,7 @@ input:focus {
 
 .btn.small {
   width: auto;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 12px;
   font-size: 0.82rem;
   margin-top: 0;
@@ -396,12 +405,13 @@ input:focus {
   color: var(--muted-2);
 }
 
-/* HORIZONTAL PLANS SCROLL / GRID (EXPLICIT USER DIRECTIVE) */
+/* HORIZONTAL PLANS SCROLL / GRID (ALL DEVICES) */
 .plans-horizontal-wrap {
   width: 100%;
   overflow-x: auto;
   padding: 6px 0 16px;
   margin-top: 18px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .plans-horizontal {
@@ -450,7 +460,6 @@ input:focus {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-
 }
 
 .plan-card .price {
@@ -492,7 +501,7 @@ input:focus {
   margin-top: 1px;
 }
 
-/* PAYG CARD SPECIFIC STYLING */
+/* PAYG CARD STYLES */
 .payg-setup-box {
   background: #0d121c;
   border: 1px solid var(--line);
@@ -586,6 +595,7 @@ input:focus {
   border-right: 1px solid var(--line);
   background: #0e131d;
   padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -966,7 +976,7 @@ input:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 20px;
+  padding: env(safe-area-inset-top, 0px) 20px 0;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -1098,13 +1108,13 @@ input:focus {
 }
 
 .hero-heading {
-  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: #e2e8f0;
 }
 
-/* CENTERED DESKTOP FLOATING COMPOSER */
+/* CENTERED FLOATING COMPOSER */
 .chat-composer.desktop-centered-pill {
   width: 100%;
   min-height: 60px;
@@ -1189,7 +1199,7 @@ input:focus {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 16px min(6vw, 48px) 24px;
+  padding: 16px min(6vw, 48px) max(24px, env(safe-area-inset-bottom, 24px));
   background: linear-gradient(180deg, transparent, var(--bg) 40%);
   pointer-events: none;
 }
@@ -1276,7 +1286,36 @@ input:focus {
   background: #2a3446;
 }
 
-/* RESPONSIVE MOBILE BREAKPOINTS */
+/* DEVICE SPECIFIC MEDIA QUERIES */
+
+/* Ultra-Wide Displays (>1440px) */
+@media (min-width: 1441px) {
+  .container {
+    width: min(1320px, 100%);
+  }
+
+  .wireframe-empty.desktop-hero {
+    width: min(860px, 100%);
+  }
+
+  .chat-composer.floating-pill {
+    width: min(860px, 100%);
+  }
+}
+
+/* Tablet & Mobile Breakpoints (<= 1024px) */
+@media (max-width: 1024px) {
+  .plans-horizontal-wrap {
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 16px;
+  }
+
+  .plan-card {
+    scroll-snap-align: center;
+  }
+}
+
+/* Mobile & Phablet Breakpoints (<= 900px) */
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1342,5 +1381,36 @@ input:focus {
   .chat-composer-wrap {
     padding-left: 16px;
     padding-right: 16px;
+  }
+}
+
+/* Mobile Small (<= 480px) */
+@media (max-width: 480px) {
+  input[type="email"],
+  input[type="password"],
+  input[type="text"] {
+    font-size: 16px; /* Prevents Safari Auto-Zoom */
+  }
+
+  .container {
+    padding: 18px 14px 32px;
+  }
+
+  .card {
+    padding: 20px;
+    border-radius: 14px;
+  }
+
+  .hero-heading {
+    font-size: 1.8rem;
+  }
+
+  .embedded-plan-pill {
+    padding: 0 8px;
+    font-size: 0.78rem;
+  }
+
+  .embedded-plan-pill span:not(.dot):not(.caret) {
+    display: none; /* Icon dot only on tiny screens */
   }
 }
