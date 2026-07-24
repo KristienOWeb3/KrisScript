@@ -30,7 +30,8 @@ export async function POST() {
       return Response.json({ synced: true, subStatus: "canceled", cancelAtPeriodEnd: true });
     }
 
-    if (subStatus === "active") {
+    // Only set sub_cancel_at_period_end = 0 if the user has NOT explicitly canceled locally
+    if (subStatus === "active" && !user.sub_cancel_at_period_end) {
       await q(
         "UPDATE users SET sub_cancel_at_period_end = 0, sub_status = 'active' WHERE id = $1",
         [user.id]

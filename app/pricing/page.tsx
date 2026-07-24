@@ -48,9 +48,23 @@ export default function PricingPage() {
     setError("");
     const res = await fetch("/api/billing/cancel-subscription", { method: "POST" });
     const data = await res.json();
-    if (!res.ok) setError(data.error);
+    if (!res.ok) {
+      setError(data.error || "Failed to cancel subscription.");
+    } else {
+      setMe((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              user: {
+                ...prev.user,
+                subCancelAtPeriodEnd: true,
+                subStatus: "canceled",
+              },
+            }
+          : prev
+      );
+    }
     setBusy("");
-    load();
   }
 
   async function setPayg(enabled: boolean) {
