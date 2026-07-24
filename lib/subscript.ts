@@ -218,14 +218,35 @@ export async function createSubscription(opts: {
 
 /** Cancel a subscription (DELETE /api/v1/subscriptions?id=). */
 export async function cancelSubscription(
-  id: string
+  id: string,
+  userAddress?: string
 ): Promise<{ status: number; body: any }> {
   if (!hasRealKey()) return { status: 200, body: { id, status: "canceled", devMode: true } };
-  const res = await fetch(`${BASE}/api/v1/subscriptions?id=${encodeURIComponent(id)}`, {
+  
+  let res = await fetch(`${BASE}/api/v1/subscriptions?id=${encodeURIComponent(id)}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+    headers: {
+      Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id, subscriptionId: id, userAddress }),
   });
-  const body = await res.json().catch(() => ({}));
+  let body = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    // Fallback attempt to /api/v1/subscriptions/cancel
+    const res2 = await fetch(`${BASE}/api/v1/subscriptions/cancel`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id, subscriptionId: id, userAddress }),
+    });
+    const body2 = await res2.json().catch(() => ({}));
+    if (res2.ok) return { status: res2.status, body: body2 };
+  }
+
   return { status: res.status, body };
 }
 

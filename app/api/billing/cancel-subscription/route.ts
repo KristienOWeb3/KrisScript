@@ -13,7 +13,7 @@ export async function POST() {
   let subscriptStatus = null;
   if (user.subscription_id) {
     try {
-      const res = await cancelSubscription(user.subscription_id);
+      const res = await cancelSubscription(user.subscription_id, user.wallet_address);
       subscriptStatus = res.status;
     } catch (e) {
       console.warn("[cancel-subscription] SubScript cancel call notice:", e);

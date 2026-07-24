@@ -205,7 +205,23 @@ export default function PricingPage() {
 
           {user && user.subCancelAtPeriodEnd && user.plan !== "free" && (
             <div className="notice-box" style={{ borderColor: "#f6c76b", background: "rgba(246, 199, 107, 0.08)", color: "#fef3c7" }}>
-              Subscription set to cancel. You keep access until current period ends. Re-subscribing reactivates your plan immediately.
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <strong>Subscription Canceled on Platform</strong>
+                  <p style={{ marginTop: 4, fontSize: "0.84rem", opacity: 0.9 }}>
+                    Your plan stays active on Kris&apos;s Script until period end. You can also click <strong>CANCEL CURRENT PLAN</strong> directly in SubScript DM below.
+                  </p>
+                </div>
+                <a
+                  className="btn secondary small"
+                  style={{ whiteSpace: "nowrap" }}
+                  href="https://dashboard.subscriptonarc.com/user"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  SubScript DM ↗
+                </a>
+              </div>
             </div>
           )}
 
