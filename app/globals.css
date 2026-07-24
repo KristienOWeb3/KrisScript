@@ -52,6 +52,7 @@ code {
   color: #d1d5db;
   padding: 2px 5px;
   font-size: 0.85em;
+  word-break: break-word;
 }
 
 /* APP SHELL & LAYOUT */
@@ -69,9 +70,14 @@ code {
 }
 
 .container {
-  width: min(1120px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
   padding: 28px 24px 40px;
+  box-sizing: border-box;
+}
+
+.pricing-container {
+  max-width: 100%;
 }
 
 .center-page {
@@ -127,6 +133,7 @@ code {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 32px;
+  box-sizing: border-box;
 }
 
 .auth-grid .card {
@@ -183,6 +190,7 @@ input[type="text"] {
   font-size: 0.94rem;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
 }
 
 input::placeholder {
@@ -209,7 +217,7 @@ input:focus {
   background: #fff;
   color: #000;
   width: 100%;
-  margin-top: 20px;
+  margin-top: 16px;
   text-align: center;
   transition: filter 0.15s ease, transform 0.1s ease;
 }
@@ -246,10 +254,11 @@ input:focus {
 .error-box,
 .notice-box {
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   font-size: 0.88rem;
-  line-height: 1.45;
+  line-height: 1.5;
   margin-top: 16px;
+  box-sizing: border-box;
 }
 
 .error-box {
@@ -286,6 +295,7 @@ input:focus {
   color: var(--muted);
   background: var(--panel-2);
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .badge.free {
@@ -311,11 +321,11 @@ input:focus {
   background: rgba(101, 217, 143, 0.08);
 }
 
-/* PAYMENT SELECTOR & PRICING */
+/* PAYMENT SELECTOR */
 .payment-method-wrap {
   margin: 20px 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #0e131d;
   padding: 18px;
 }
@@ -386,37 +396,67 @@ input:focus {
   color: var(--muted-2);
 }
 
-.plans {
+/* HORIZONTAL PLANS SCROLL / GRID (EXPLICIT USER DIRECTIVE) */
+.plans-horizontal-wrap {
+  width: 100%;
+  overflow-x: auto;
+  padding: 6px 0 16px;
+  margin-top: 18px;
+}
+
+.plans-horizontal {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 24px;
+  grid-template-columns: repeat(4, minmax(270px, 1fr));
+  gap: 16px;
+  min-width: min-content;
 }
 
 .plan-card {
-  background: var(--panel);
+  background: #121824;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  min-height: 340px;
+  justify-content: space-between;
+  min-height: 440px;
+  position: relative;
+  box-sizing: border-box;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.plan-card:hover {
+  border-color: var(--line-strong);
 }
 
 .plan-card.featured {
   border-color: #3b82f6;
-  background: linear-gradient(180deg, #172033, var(--panel));
+  background: linear-gradient(180deg, #182236, #121824);
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15);
+}
+
+.plan-card.active-plan-card {
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
 .plan-card h3 {
-  font-size: 1.05rem;
-  margin-bottom: 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
 }
 
 .plan-card .price {
   font-size: 1.65rem;
   font-weight: 720;
-  margin-bottom: 6px;
+  margin: 10px 0 6px;
 }
 
 .plan-card .price small {
@@ -425,28 +465,109 @@ input:focus {
   font-weight: 450;
 }
 
-.plan-card ul {
+.plan-features {
   list-style: none;
-  margin: 12px 0 16px;
+  margin: 16px 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.plan-card li {
+.plan-features li {
   color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.42;
-  padding: 5px 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
 
-.plan-card li::before {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-right: 8px;
-  margin-bottom: 2px;
-  border-radius: 50%;
-  background: var(--green);
+.plan-features li::before {
+  content: "✓";
+  color: #65d98f;
+  font-weight: 700;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* PAYG CARD SPECIFIC STYLING */
+.payg-setup-box {
+  background: #0d121c;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 0.82rem;
+  margin-top: 12px;
+}
+
+.setup-title {
+  color: #65d98f;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.setup-steps {
+  margin: 0 0 12px 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.setup-steps li {
+  margin-bottom: 4px;
+}
+
+.merchant-tag {
+  color: #65d98f;
+  background: rgba(101, 217, 143, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.input-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted-2);
+  margin-bottom: 4px;
+}
+
+.payg-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  background: #080a0f;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #fff;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.user-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #141b29;
+  border-color: var(--line-strong);
+}
+
+.dm-notice-box {
+  margin-top: 24px;
+  background: #0e131d;
+  border-color: var(--line);
+}
+
+.dm-notice-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 /* DRAWER & SIDEBAR */
@@ -1197,7 +1318,10 @@ input:focus {
     display: none;
   }
 
-  .plans,
+  .plans-horizontal {
+    grid-template-columns: 1fr;
+  }
+
   .payment-method-selector {
     grid-template-columns: 1fr;
   }

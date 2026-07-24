@@ -27,7 +27,9 @@ export async function POST(req: Request) {
   const now = Math.floor(Date.now() / 1000);
   const currentPlan = user.plan || "free";
   const currentPlanActive =
-    (currentPlan === "pro" || currentPlan === "promax") && (user.plan_expires_at ?? 0) > now;
+    (currentPlan === "pro" || currentPlan === "promax") &&
+    (user.plan_expires_at ?? 0) > now &&
+    !user.sub_cancel_at_period_end;
   const currentLevel = currentPlanActive ? (PLAN_LEVELS[currentPlan] ?? 0) : 0;
   const requestedLevel = PLAN_LEVELS[product] ?? 0;
 
@@ -54,8 +56,6 @@ export async function POST(req: Request) {
     }
   }
 
-  // One payments row per logical checkout; its id doubles as the SubScript
-  // idempotencyKey so a retried request replays the same checkout/subscription.
   const paymentId = crypto.randomUUID();
   await q(
     "INSERT INTO payments (id, user_id, product, amount_micros) VALUES ($1, $2, $3, $4)",
@@ -65,15 +65,6 @@ export async function POST(req: Request) {
 
   try {
     if (spec.kind === "subscription") {
-      // If user has a previous subscription set to cancel, attempt to clear it on Subscript first
-      if (user.subscription_id && (user.sub_cancel_at_period_end || user.sub_status === "canceled")) {
-        try {
-          await cancelSubscription(user.subscription_id);
-        } catch {
-          // Ignore if already removed on Subscript
-        }
-      }
-
       // Pro / Pro Max are real recurring subscriptions on SubScript.
       const result = await createSubscription({
         title: spec.title,
@@ -89,13 +80,11 @@ export async function POST(req: Request) {
         result.subscription.id,
         paymentId,
       ]);
-      // Record the subscription id on the user immediately so cancel works
-      // even before the first webhook lands.
-      await q("UPDATE users SET subscription_id = $1, sub_status = $2 WHERE id = $3", [
-        result.subscription.id,
-        result.subscription.status,
-        user.id,
-      ]);
+      // Update subscription id and clear cancellation flag on resubscribe
+      await q(
+        "UPDATE users SET subscription_id = $1, sub_status = $2, sub_cancel_at_period_end = 0, plan = $4 WHERE id = $3",
+        [result.subscription.id, result.subscription.status || "active", user.id, product]
+      );
       return Response.json({
         checkoutUrl: result.subscription.checkoutUrl,
         intentId: result.subscription.id,

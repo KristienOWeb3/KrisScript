@@ -1,43 +1,45 @@
 import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { hasRealKey, cancelSubscription, getSubscription } from "@/lib/subscript";
+import { hasRealKey, getSubscription } from "@/lib/subscript";
 import { FREE_MESSAGE_CAP, PRO_DAILY_CAP } from "@/lib/plans";
 
 export async function GET() {
   const user = await currentUser();
   if (!user) return Response.json({ user: null });
 
-  // Background status check: if active plan is not marked as canceled yet, check SubScript
-  if (user.plan !== "free" && !user.sub_cancel_at_period_end) {
+  // Background status check: fetch subscription status directly from SubScript API
+  if (user.plan !== "free") {
     const targetId = user.subscription_id || user.wallet_address || "";
     if (targetId) {
       try {
-        const { status: httpStatus, subscription } = await getSubscription(targetId);
-        const subStatus = subscription?.status || "";
-        const cancelAt = subscription?.cancel_at_period_end ?? subscription?.cancelAtPeriodEnd;
-        let isCanceled =
-          subStatus === "canceled" ||
-          subStatus === "cancelled" ||
-          subStatus === "deleted" ||
-          cancelAt === true;
+        const { subscription } = await getSubscription(targetId);
+        if (subscription) {
+          const subStatus = subscription.status || "";
+          const cancelAt = subscription.cancel_at_period_end ?? subscription.cancelAtPeriodEnd;
+          const isCanceled =
+            subStatus === "canceled" ||
+            subStatus === "cancelled" ||
+            subStatus === "deleted" ||
+            cancelAt === true;
 
-        if (!isCanceled && user.subscription_id) {
-          const cancelCheck = await cancelSubscription(user.subscription_id);
-          if (cancelCheck.status === 409 || cancelCheck.status === 200 || cancelCheck.status === 404) {
-            isCanceled = true;
+          if (isCanceled) {
+            await q(
+              "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
+              [user.id]
+            );
+            user.sub_cancel_at_period_end = 1;
+            user.sub_status = "canceled";
+          } else if (subStatus === "active") {
+            await q(
+              "UPDATE users SET sub_cancel_at_period_end = 0, sub_status = 'active' WHERE id = $1",
+              [user.id]
+            );
+            user.sub_cancel_at_period_end = 0;
+            user.sub_status = "active";
           }
         }
-
-        if (isCanceled) {
-          await q(
-            "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
-            [user.id]
-          );
-          user.sub_cancel_at_period_end = 1;
-          user.sub_status = "canceled";
-        }
       } catch (e) {
-        console.warn("[/api/me] Background sync notice:", e);
+        console.warn("[/api/me] Background status check notice:", e);
       }
     }
   }

@@ -50,7 +50,6 @@ export async function fulfillPayment(
   if (payment.product === "signup") {
     await q("UPDATE users SET activated = 1 WHERE id = $1", [payment.user_id]);
   } else if (payment.product === "pro" || payment.product === "promax") {
-    const now = Math.floor(Date.now() / 1000);
     const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
     await handleSubscriptionEvent("subscription.created", {
       subscription_id: payment.intent_id ?? undefined,
@@ -119,10 +118,9 @@ export async function handleSubscriptionEvent(
   if (!resolved) return { ok: false, reason: "subscription_user_not_found" };
   const { user, product } = resolved;
   const now = Math.floor(Date.now() / 1000);
-  const status = data.status || "";
+  const status = data.status || "active";
   const subId = data.subscription_id || data.id;
 
-  // Determine current active product by checking payload amounts (handles DM upgrades).
   let activeProduct = product;
   const amt = data.amountUsdcMicros || data.amount_usdc_micros;
   if (amt) {
@@ -130,11 +128,10 @@ export async function handleSubscriptionEvent(
     else if (amt === PRODUCTS.pro.amountUsdcMicros) activeProduct = "pro";
   }
 
-  // Always keep the stored subscription id / status / plan current, plus auto-capture wallet address if present.
   const wallet = (data as any).subscriber || (data as any).subscriber_address || (data as any).user_address || (data as any).wallet_address;
   await q(
     "UPDATE users SET subscription_id = COALESCE($1, subscription_id), sub_status = $2, plan = $4, wallet_address = COALESCE(wallet_address, $5) WHERE id = $3",
-    [subId ?? null, status || null, user.id, activeProduct, wallet || null]
+    [subId ?? null, status, user.id, activeProduct, wallet || null]
   );
 
   const isCharge =
@@ -148,13 +145,12 @@ export async function handleSubscriptionEvent(
         ? user.plan_expires_at!
         : 0;
     const base = existingExpiry > now ? existingExpiry : now;
-    const alreadyExtended = existingExpiry > now && type === "subscription.updated";
-    if (!alreadyExtended) {
-      await q(
-        "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0 WHERE id = $2",
-        [base + PLAN_DURATION_SECONDS, user.id]
-      );
-    }
+    const newExpiry = base + PLAN_DURATION_SECONDS;
+    
+    await q(
+      "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0, sub_status = 'active' WHERE id = $2",
+      [newExpiry, user.id]
+    );
   }
 
   const isCanceled =
@@ -168,16 +164,7 @@ export async function handleSubscriptionEvent(
 
   if (isCanceled) {
     await q("UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1", [user.id]);
-  } else if (type === "subscription.updated") {
-    const cancelAt = data.cancel_at_period_end ?? data.cancelAtPeriodEnd;
-    if (cancelAt != null) {
-      await q("UPDATE users SET sub_cancel_at_period_end = $1 WHERE id = $2", [
-        cancelAt ? 1 : 0,
-        user.id,
-      ]);
-    }
   }
-  // subscription.payment_failed: status stored above (e.g. past_due); no extension.
 
   return { ok: true };
 }
