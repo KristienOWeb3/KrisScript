@@ -58,7 +58,11 @@ ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS processing_at INTEGER;
 ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS processed_at INTEGER;
 ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS error TEXT;
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, role, billed);
+CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(user_id, thread_id);
 CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(intent_id);
+CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_sub_id ON users(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet_address);
 `;
 
 interface Backend {

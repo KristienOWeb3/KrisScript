@@ -1,20 +1,21 @@
 import crypto from "crypto";
 import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { hasRealKey, signWebhook } from "@/lib/subscript";
+import { signWebhook } from "@/lib/subscript";
 import type { Payment } from "@/lib/billing";
 
 /**
  * DEV MODE ONLY: simulates SubScript completing a checkout by POSTing a
- * signed payment.succeeded event to our own webhook endpoint — the exact
- * payload shape and signature scheme SubScript documents. Disabled the
- * moment a real SUBSCRIPT_SECRET_KEY is configured.
+ * signed payment.succeeded or subscription.* event to our own webhook endpoint.
  */
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
 
-  const { intentId } = (await req.json().catch(() => ({}))) as { intentId?: string };
+  const { intentId, eventType } = (await req.json().catch(() => ({}))) as {
+    intentId?: string;
+    eventType?: string;
+  };
   const payment = await one<Payment>(
     "SELECT * FROM payments WHERE intent_id = $1 AND user_id = $2",
     [intentId, user.id]
@@ -23,36 +24,42 @@ export async function POST(req: Request) {
 
   const isSubscription = payment.product === "pro" || payment.product === "promax";
   const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
-  const event = isSubscription
-    ? {
-        id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-        type: "subscription.created",
-        created: Math.floor(Date.now() / 1000),
-        data: {
-          subscription_id: payment.intent_id,
-          status: "active",
-          external_reference: externalReference,
-          amount_usdc_micros: payment.amount_micros,
-          currency: "USDC",
-          transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
-          chain_id: 5042002,
-          simulated: true,
-        },
-      }
-    : {
-        id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-        type: "payment.succeeded",
-        created: Math.floor(Date.now() / 1000),
-        data: {
-          intent_id: payment.intent_id,
-          merchant_reference: externalReference,
-          amount_usdc_micros: payment.amount_micros,
-          currency: "USDC",
-          receipt_id: payment.receipt_token,
-          transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
-          chain_id: 5042002,
-        },
-      };
+  
+  const targetType =
+    eventType || (isSubscription ? "subscription.created" : "payment.succeeded");
+
+  let eventData: any = {
+    amount_usdc_micros: payment.amount_micros,
+    currency: "USDC",
+    transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
+    chain_id: 5042002,
+    simulated: true,
+  };
+
+  if (isSubscription) {
+    eventData = {
+      ...eventData,
+      subscription_id: payment.intent_id,
+      status: targetType.endsWith("canceled") ? "canceled" : "active",
+      external_reference: externalReference,
+      cancel_at_period_end: targetType.endsWith("canceled"),
+    };
+  } else {
+    eventData = {
+      ...eventData,
+      intent_id: payment.intent_id,
+      merchant_reference: externalReference,
+      receipt_id: payment.receipt_token,
+    };
+  }
+
+  const event = {
+    id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+    type: targetType,
+    created: Math.floor(Date.now() / 1000),
+    data: eventData,
+  };
+
   const rawBody = JSON.stringify(event);
   const origin = new URL(req.url).origin;
   const res = await fetch(`${origin}/api/webhooks/subscript`, {

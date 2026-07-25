@@ -101,6 +101,24 @@ async function resolveSubUser(
       if (user) return { user, product: payment.product };
     }
   }
+
+  // Fallback: match by subscriber wallet address if subscription_id / ref lookup was not found
+  const wallet =
+    (data as any).subscriber ||
+    (data as any).subscriber_address ||
+    (data as any).user_address ||
+    (data as any).wallet_address;
+  if (wallet && typeof wallet === "string") {
+    const cleanWallet = wallet.toLowerCase().trim();
+    const user = await one<User>("SELECT * FROM users WHERE LOWER(wallet_address) = $1", [
+      cleanWallet,
+    ]);
+    if (user) {
+      const p = user.plan === "promax" ? "promax" : "pro";
+      return { user, product: p };
+    }
+  }
+
   return null;
 }
 

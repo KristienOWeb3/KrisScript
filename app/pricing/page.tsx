@@ -3,20 +3,47 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+type Transaction = {
+  id: string;
+  product: string;
+  amountMicros: string;
+  amountUsdc: string;
+  intentId: string | null;
+  receiptToken: string | null;
+  status: string;
+  createdAt: number;
+};
+
 export default function PricingPage() {
   const router = useRouter();
   const [me, setMe] = useState<any>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
   const [paygWalletInput, setPaygWalletInput] = useState("");
 
+  function showToast(msg: string) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 4000);
+  }
+
   async function load() {
-    const data = await fetch("/api/me").then((r) => r.json());
-    if (!data.user) return router.replace("/login");
-    setMe(data);
-    if (data.user?.walletAddress) {
-      setPaygWalletInput((prev) => prev || data.user.walletAddress);
+    try {
+      const data = await fetch("/api/me").then((r) => r.json());
+      if (!data.user) return router.replace("/login");
+      setMe(data);
+      if (data.user?.walletAddress) {
+        setPaygWalletInput((prev) => prev || data.user.walletAddress);
+      }
+
+      // Fetch transaction history
+      const txRes = await fetch("/api/billing/transactions").then((r) => r.json());
+      if (txRes.transactions) setTransactions(txRes.transactions);
+    } catch {
+      // Fallback
     }
   }
 
@@ -24,6 +51,25 @@ export default function PricingPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function syncStatus() {
+    setIsSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/billing/sync", { method: "POST" });
+      const data = await res.json();
+      await load();
+      if (data.synced) {
+        showToast("⚡ Status synchronized with SubScript!");
+      } else {
+        showToast("Sync checked: No changes detected.");
+      }
+    } catch {
+      setError("Failed to sync status.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   async function subscribe(product: "pro" | "promax") {
     if (paymentMethod === "card") return;
@@ -40,6 +86,7 @@ export default function PricingPage() {
       setBusy("");
       return;
     }
+    showToast("Redirecting to SubScript checkout...");
     window.location.href = data.checkoutUrl;
   }
 
@@ -51,6 +98,7 @@ export default function PricingPage() {
     if (!res.ok) {
       setError(data.error || "Failed to cancel subscription.");
     } else {
+      showToast("Subscription canceled. Access remains active until period end.");
       setMe((prev: any) =>
         prev
           ? {
@@ -76,20 +124,28 @@ export default function PricingPage() {
       body: JSON.stringify({ enabled, walletAddress: paygWalletInput.trim() }),
     });
     const data = await res.json();
-    if (!res.ok) setError(data.error);
+    if (!res.ok) {
+      setError(data.error);
+    } else {
+      showToast(enabled ? "⚡ Pay-as-you-chat enabled!" : "Pay-as-you-chat disabled.");
+      load();
+    }
     setBusy("");
-    load();
   }
 
   const user = me?.user;
+  const now = Math.floor(Date.now() / 1000);
   const PLAN_LEVELS: Record<string, number> = { free: 0, pro: 1, promax: 2 };
   const currentPlanActive =
     (user?.plan === "pro" || user?.plan === "promax") &&
-    (user?.planExpiresAt ?? 0) > Math.floor(Date.now() / 1000) &&
+    (user?.planExpiresAt ?? 0) > now &&
     !user?.subCancelAtPeriodEnd;
   const userLevel = currentPlanActive ? (PLAN_LEVELS[user?.plan] ?? 0) : 0;
 
   const isHigherPlanActive = (p: "pro" | "promax") => userLevel > PLAN_LEVELS[p];
+
+  const secondsRemaining = (user?.planExpiresAt ?? 0) - now;
+  const isWithinSixHours = secondsRemaining <= 6 * 3600;
 
   const activeSub = (p: string) =>
     user?.plan === p &&
@@ -100,8 +156,18 @@ export default function PricingPage() {
     if (busy === p) return "Creating subscription...";
     if (isHigherPlanActive(p)) return "Included in Pro Max";
     if (user?.plan === p && user?.subCancelAtPeriodEnd) return `Re-subscribe - ${price}`;
-    if (activeSub(p)) return "Subscribed";
+    if (activeSub(p)) {
+      if (!isWithinSixHours) return "Active (Renews soon)";
+      return `Renew Plan - ${price}`;
+    }
     return `Subscribe - ${price}`;
+  }
+
+  function isButtonDisabled(p: "pro" | "promax") {
+    if (busy !== "") return true;
+    if (isHigherPlanActive(p)) return true;
+    if (activeSub(p) && !isWithinSixHours) return true;
+    return false;
   }
 
   const userPlanLabel =
@@ -109,6 +175,28 @@ export default function PricingPage() {
 
   return (
     <div className="app-shell">
+      {/* TOAST NOTIFICATION POPUP */}
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            background: "#1f293d",
+            color: "#65d98f",
+            padding: "12px 20px",
+            borderRadius: "8px",
+            border: "1px solid #65d98f",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            zIndex: 9999,
+            fontWeight: 600,
+            fontSize: "0.9rem",
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
       <aside className="rail">
         <div className="rail-header">
           <div className="rail-brand">
@@ -163,6 +251,14 @@ export default function PricingPage() {
           </div>
 
           <div className="topbar-right">
+            <button
+              className="btn ghost small"
+              onClick={syncStatus}
+              disabled={isSyncing}
+              style={{ fontSize: "0.85rem", padding: "4px 10px" }}
+            >
+              {isSyncing ? "Syncing..." : "🔄 Sync & Refresh Status"}
+            </button>
             {me?.devMode && <span className="badge dev">DEV MODE</span>}
             {user && <span className="badge pro">{userPlanLabel}</span>}
           </div>
@@ -297,7 +393,7 @@ export default function PricingPage() {
                 <button
                   className="btn"
                   onClick={() => subscribe("pro")}
-                  disabled={busy !== "" || activeSub("pro") || isHigherPlanActive("pro")}
+                  disabled={isButtonDisabled("pro")}
                 >
                   {planButtonLabel("pro", "$2/wk")}
                 </button>
@@ -322,7 +418,7 @@ export default function PricingPage() {
                 <button
                   className="btn"
                   onClick={() => subscribe("promax")}
-                  disabled={busy !== "" || activeSub("promax")}
+                  disabled={isButtonDisabled("promax")}
                 >
                   {planButtonLabel("promax", "$5/wk")}
                 </button>
@@ -347,7 +443,7 @@ export default function PricingPage() {
                       Go to <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer">SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
                     </li>
                     <li>
-                      Click <strong>&quot;Commit to a service&quot;</strong> and enter Merchant Name: <code className="merchant-tag">Okechukwuanigba.sub</code>.
+                      Click <strong>&quot;Commit to a service&quot;</strong> and enter Merchant Name: <code className="merchant-tag">Subscript.sub</code>.
                     </li>
                     <li>
                       Commit min <strong>$2 USDC</strong> to activate vault.
@@ -392,8 +488,65 @@ export default function PricingPage() {
             </div>
           </div>
 
+          {/* IN-APP TRANSACTION & RECEIPT HISTORY TABLE */}
+          {transactions.length > 0 && (
+            <div className="notice-box" style={{ marginTop: 24, flexDirection: "column", alignItems: "stretch" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <strong style={{ fontSize: "1.05rem" }}>Receipt & Transaction History</strong>
+                <span className="muted" style={{ fontSize: "0.8rem" }}>{transactions.length} record(s)</span>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left", opacity: 0.8 }}>
+                      <th style={{ padding: "8px 12px" }}>Product</th>
+                      <th style={{ padding: "8px 12px" }}>Amount</th>
+                      <th style={{ padding: "8px 12px" }}>Status</th>
+                      <th style={{ padding: "8px 12px" }}>Receipt Token</th>
+                      <th style={{ padding: "8px 12px" }}>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map((tx) => (
+                      <tr key={tx.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                        <td style={{ padding: "8px 12px", textTransform: "capitalize" }}>
+                          <strong>{tx.product}</strong>
+                        </td>
+                        <td style={{ padding: "8px 12px" }}>${tx.amountUsdc} USDC</td>
+                        <td style={{ padding: "8px 12px" }}>
+                          <span
+                            className={`badge ${
+                              tx.status === "PAID"
+                                ? "pro"
+                                : tx.status === "FAILED"
+                                ? "danger"
+                                : "free"
+                            }`}
+                            style={{ fontSize: "0.7rem", padding: "2px 6px" }}
+                          >
+                            {tx.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: "0.8rem", opacity: 0.8 }}>
+                          {tx.receiptToken || tx.intentId ? (
+                            <span>{tx.receiptToken || tx.intentId}</span>
+                          ) : (
+                            <span style={{ opacity: 0.4 }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ padding: "8px 12px", opacity: 0.7 }}>
+                          {new Date(tx.createdAt * 1000).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* SUBSCRIPT USER DM LINK */}
-          <div className="notice-box dm-notice-box">
+          <div className="notice-box dm-notice-box" style={{ marginTop: 24 }}>
             <div className="dm-notice-content">
               <div>
                 <strong style={{ fontSize: "1rem" }}>SubScript User Dashboard & DM</strong>

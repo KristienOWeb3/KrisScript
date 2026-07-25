@@ -9,26 +9,86 @@ export default function ActivatePage() {
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [devMode, setDevMode] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const delayRef = useRef(3000);
+
+  function showToast(msg: string) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 4000);
+  }
+
+  async function checkActivation() {
+    if (typeof document !== "undefined" && document.hidden) return;
+    try {
+      const res = await fetch("/api/me");
+      const data = await res.json();
+      if (!data.user) {
+        router.replace("/login");
+        return;
+      }
+      if (data.user.activated) {
+        showToast("⚡ Activation confirmed! Redirecting...");
+        router.replace("/chat");
+        return;
+      }
+      setDevMode(data.devMode);
+    } catch {
+      // Ignore network errors in background poll
+    }
+  }
+
+  // Adaptive exponential backoff polling with Page Visibility API check
   useEffect(() => {
-    fetch("/api/me")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.user) return router.replace("/login");
-        if (data.user.activated) return router.replace("/chat");
-        setDevMode(data.devMode);
-      });
-    // Poll so that a webhook landing while this page is open advances the user.
-    pollRef.current = setInterval(async () => {
-      const data = await fetch("/api/me").then((r) => r.json());
-      if (data.user?.activated) router.replace("/chat");
-    }, 4000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+    checkActivation();
+
+    function scheduleNext() {
+      timeoutRef.current = setTimeout(async () => {
+        await checkActivation();
+        delayRef.current = Math.min(delayRef.current * 1.3, 12000);
+        scheduleNext();
+      }, delayRef.current);
+    }
+
+    scheduleNext();
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        delayRef.current = 3000;
+        checkActivation();
+      }
     };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  async function manualSync() {
+    setIsSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/billing/sync", { method: "POST" });
+      const data = await res.json();
+      await checkActivation();
+      if (data.synced) {
+        showToast("⚡ Status synchronized!");
+      } else {
+        showToast("Sync checked: No update yet.");
+      }
+    } catch {
+      setError("Failed to sync status with SubScript.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   async function pay() {
     setBusy(true);
@@ -47,6 +107,7 @@ export default function ActivatePage() {
       return;
     }
     setWaiting(true);
+    showToast("Redirecting to SubScript checkout...");
     window.location.href = data.checkoutUrl;
   }
 
@@ -57,8 +118,40 @@ export default function ActivatePage() {
 
   return (
     <div className="center-page">
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            background: "#1f293d",
+            color: "#65d98f",
+            padding: "10px 18px",
+            borderRadius: "8px",
+            border: "1px solid #65d98f",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            zIndex: 9999,
+            fontWeight: 600,
+            fontSize: "0.9rem",
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
       <div className="card">
-        <span className="badge pro">ACTIVATION</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span className="badge pro">ACTIVATION</span>
+          <button
+            className="btn ghost small"
+            onClick={manualSync}
+            disabled={isSyncing}
+            style={{ fontSize: "0.8rem", padding: "4px 8px" }}
+          >
+            {isSyncing ? "Syncing..." : "🔄 Refresh Status"}
+          </button>
+        </div>
+
         <h1 className="brand" style={{ fontSize: "1.85rem", marginTop: 16 }}>
           One last step
         </h1>
@@ -106,6 +199,7 @@ export default function ActivatePage() {
         <button className="btn" onClick={pay} disabled={busy}>
           {busy ? (waiting ? "Redirecting to checkout..." : "Creating checkout...") : "Pay $1 and activate"}
         </button>
+
         <div className="prompt-row" style={{ marginTop: 16 }}>
           <a className="btn secondary small" href="/login">
             Sign in
@@ -117,15 +211,12 @@ export default function ActivatePage() {
             Sign out
           </button>
         </div>
+
         {error && <div className="error-box">{error}</div>}
+
         <p className="muted mt">
           After paying you&apos;ll be activated automatically once SubScript&apos;s{" "}
           <code>payment.succeeded</code> webhook is verified - never from the redirect alone.
-        </p>
-        <p className="muted mt">
-          If SubScript shows success but this page keeps waiting, the hosted checkout worked but
-          the production webhook is not reaching Kris&apos;s Script yet. Use{" "}
-          <code>https://kris-script.vercel.app/api/webhooks/subscript</code> in SubScript.
         </p>
       </div>
     </div>

@@ -2,6 +2,13 @@
   "mcpServers": {
     "supabase": {
       "url": "https://mcp.supabase.com/mcp?project_ref=lodpkpsmerqskyylbkzt"
+    },
+    "subscript-payments": {
+      "command": "node",
+      "args": ["scripts/mcp-server.mjs"],
+      "env": {
+        "SUBSCRIPT_SECRET_KEY": "${SUBSCRIPT_SECRET_KEY}"
+      }
     }
   }
 }

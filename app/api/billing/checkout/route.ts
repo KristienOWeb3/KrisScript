@@ -41,6 +41,23 @@ export async function POST(req: Request) {
     );
   }
 
+  // 6-hour resubscription window rule:
+  // If user attempts to resubscribe to their current active plan, block if > 6 hours remain before expiration.
+  if (requestedLevel === currentLevel && currentPlanActive) {
+    const secondsRemaining = (user.plan_expires_at ?? 0) - now;
+    const SIX_HOURS = 6 * 3600;
+    if (secondsRemaining > SIX_HOURS) {
+      const hoursRemaining = (secondsRemaining / 3600).toFixed(1);
+      const planName = currentPlan === "promax" ? "Pro Max" : "Pro";
+      return Response.json(
+        {
+          error: `Your ${planName} plan is active with ${hoursRemaining} hours remaining. Resubscription is only allowed within 6 hours of plan expiration.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const spec = PRODUCTS[product];
   let subscriberAddress: string | undefined;
   if (spec.kind === "subscription") {
