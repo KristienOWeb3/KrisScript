@@ -277,15 +277,24 @@ export async function getSubscription(
 }
 
 /**
- * Report metered usage against a customer's vault
+ * Report metered usage against a customer's vault or Commit ID
  * (POST /api/user/vault/report-usage). Returns HTTP status + parsed body;
  * 402 means the vault is inactive / balance exhausted.
  */
 export async function reportUsage(
-  userAddress: string,
+  userAddressOrCommitId: string,
   amountUsdcMicros: string,
   requestId: string
 ): Promise<{ status: number; body: any }> {
+  const target = userAddressOrCommitId.trim();
+  const isCommit = target.startsWith("cmt_") || !/^0x[a-fA-F0-9]{40}$/.test(target);
+  const payload: Record<string, string> = { amountUsdcMicros };
+  if (isCommit) {
+    payload.commitId = target;
+  } else {
+    payload.userAddress = target;
+  }
+
   const res = await fetch(`${BASE}/api/user/vault/report-usage`, {
     method: "POST",
     headers: {
@@ -293,7 +302,7 @@ export async function reportUsage(
       "Content-Type": "application/json",
       "x-request-id": requestId,
     },
-    body: JSON.stringify({ userAddress, amountUsdcMicros }),
+    body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));
   return { status: res.status, body };

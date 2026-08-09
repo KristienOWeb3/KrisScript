@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const address = (walletAddress || user.wallet_address || "").trim();
     if (!address) {
       return Response.json(
-        { error: "Please enter your SubScript wallet address (0x...) or complete a SubScript checkout first." },
+        { error: "Please enter your SubScript Commit ID (cmt_...) or wallet address (0x...)." },
         { status: 400 }
       );
     }

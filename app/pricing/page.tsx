@@ -364,10 +364,10 @@ export default function PricingPage() {
                     </li>
                   </ol>
 
-                  <label className="input-label">SubScript Vault / Wallet Address:</label>
+                  <label className="input-label">SubScript Commit ID / Vault Address:</label>
                   <input
                     type="text"
-                    placeholder="Paste 0x... wallet address"
+                    placeholder="Paste SubScript Commit ID (cmt_...) or 0x... address"
                     value={paygWalletInput}
                     onChange={(e) => setPaygWalletInput(e.target.value)}
                     className="payg-input"
