@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "An account with this email already exists." }, { status: 409 });
   }
   const row = await one<{ id: number }>(
-    "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
+    "INSERT INTO users (email, password_hash, activated) VALUES ($1, $2, 1) RETURNING id",
     [email.toLowerCase(), hashPassword(password)]
   );
   await createSession(Number(row!.id));

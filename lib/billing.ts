@@ -1,11 +1,10 @@
 import { q, one } from "./db";
 import type { User } from "./auth";
-import { PLAN_DURATION_SECONDS, PRODUCTS } from "./plans";
 
 export type Payment = {
   id: string;
   user_id: number;
-  product: "signup" | "pro" | "promax";
+  product: string;
   amount_micros: string;
   intent_id: string | null;
   receipt_token: string | null;
@@ -14,10 +13,7 @@ export type Payment = {
 };
 
 /**
- * Fulfill a ONE-TIME payment referenced by a verified payment.succeeded
- * webhook (the $1 activation fee). Subscriptions are handled separately by
- * handleSubscriptionEvent. Idempotent: the PENDING -> PAID flip is the
- * atomic claim, so repeated deliveries fulfill at most once.
+ * Fulfill a payment referenced by a verified webhook.
  */
 export async function fulfillPayment(
   intentId: string | undefined,
@@ -47,142 +43,14 @@ export async function fulfillPayment(
   );
   if (claim.rowCount === 0) return { ok: true, already: true };
 
-  if (payment.product === "signup") {
-    await q("UPDATE users SET activated = 1 WHERE id = $1", [payment.user_id]);
-  } else if (payment.product === "pro" || payment.product === "promax") {
-    const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
-    await handleSubscriptionEvent("subscription.created", {
-      subscription_id: payment.intent_id ?? undefined,
-      status: "active",
-      external_reference: externalReference,
-      amount_usdc_micros: payment.amount_micros,
-    });
-  }
+  await q("UPDATE users SET activated = 1 WHERE id = $1", [payment.user_id]);
   return { ok: true };
 }
 
-type SubEventData = {
-  id?: string;
-  subscription_id?: string;
-  status?: string;
-  external_reference?: string;
-  externalReference?: string;
-  cancel_at_period_end?: boolean;
-  cancelAtPeriodEnd?: boolean;
-  amount_usdc_micros?: string;
-  amountUsdcMicros?: string;
-};
-
-/** Resolve which user + product a subscription event belongs to. */
-async function resolveSubUser(
-  data: SubEventData
-): Promise<{ user: User; product: "pro" | "promax" } | null> {
-  const ref = data.external_reference || data.externalReference || "";
-  const [product, userId] = ref.split(":");
-  if ((product === "pro" || product === "promax") && userId) {
-    const user = await one<User>("SELECT * FROM users WHERE id = $1", [Number(userId)]);
-    if (user) return { user, product };
-  }
-  const subId = data.subscription_id || data.id;
-  if (subId) {
-    const user = await one<User>("SELECT * FROM users WHERE subscription_id = $1", [
-      subId,
-    ]);
-    if (user) {
-      const p = user.plan === "promax" ? "promax" : "pro";
-      return { user, product: p };
-    }
-    const payment = await one<Payment>(
-      "SELECT * FROM payments WHERE intent_id = $1 LIMIT 1",
-      [subId]
-    );
-    if (payment && (payment.product === "pro" || payment.product === "promax")) {
-      const user = await one<User>("SELECT * FROM users WHERE id = $1", [payment.user_id]);
-      if (user) return { user, product: payment.product };
-    }
-  }
-
-  // Fallback: match by subscriber wallet address if subscription_id / ref lookup was not found
-  const wallet =
-    (data as any).subscriber ||
-    (data as any).subscriber_address ||
-    (data as any).user_address ||
-    (data as any).wallet_address;
-  if (wallet && typeof wallet === "string") {
-    const cleanWallet = wallet.toLowerCase().trim();
-    const user = await one<User>("SELECT * FROM users WHERE LOWER(wallet_address) = $1", [
-      cleanWallet,
-    ]);
-    if (user) {
-      const p = user.plan === "promax" ? "promax" : "pro";
-      return { user, product: p };
-    }
-  }
-
-  return null;
-}
-
-/**
- * Handle subscription.* webhooks. A successful charge (created/renewed while
- * active) grants one PLAN_DURATION period; SubScript re-charges each interval
- * and fires subscription.renewed to push it forward. Cancellation / payment
- * failure stop the extension and the plan lapses at plan_expires_at.
- */
 export async function handleSubscriptionEvent(
   type: string,
-  data: SubEventData
+  data: any
 ): Promise<{ ok: boolean; reason?: string }> {
-  const resolved = await resolveSubUser(data);
-  if (!resolved) return { ok: false, reason: "subscription_user_not_found" };
-  const { user, product } = resolved;
-  const now = Math.floor(Date.now() / 1000);
-  const status = data.status || "active";
-  const subId = data.subscription_id || data.id;
-
-  let activeProduct = product;
-  const amt = data.amountUsdcMicros || data.amount_usdc_micros;
-  if (amt) {
-    if (amt === PRODUCTS.promax.amountUsdcMicros) activeProduct = "promax";
-    else if (amt === PRODUCTS.pro.amountUsdcMicros) activeProduct = "pro";
-  }
-
-  const wallet = (data as any).subscriber || (data as any).subscriber_address || (data as any).user_address || (data as any).wallet_address;
-  await q(
-    "UPDATE users SET subscription_id = COALESCE($1, subscription_id), sub_status = $2, plan = $4, wallet_address = COALESCE(wallet_address, $5) WHERE id = $3",
-    [subId ?? null, status, user.id, activeProduct, wallet || null]
-  );
-
-  const isCharge =
-    type === "subscription.created" ||
-    type === "subscription.renewed" ||
-    (type === "subscription.updated" && status === "active");
-
-  if (isCharge && status === "active") {
-    const existingExpiry =
-      user.plan === activeProduct && (user.plan_expires_at ?? 0) > now
-        ? user.plan_expires_at!
-        : 0;
-    const base = existingExpiry > now ? existingExpiry : now;
-    const newExpiry = base + PLAN_DURATION_SECONDS;
-    
-    await q(
-      "UPDATE users SET plan_expires_at = $1, sub_cancel_at_period_end = 0, sub_status = 'active' WHERE id = $2",
-      [newExpiry, user.id]
-    );
-  }
-
-  const isCanceled =
-    type === "subscription.canceled" ||
-    type === "subscription.deleted" ||
-    status === "canceled" ||
-    status === "cancelled" ||
-    status === "deleted" ||
-    data.cancel_at_period_end === true ||
-    data.cancelAtPeriodEnd === true;
-
-  if (isCanceled) {
-    await q("UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1", [user.id]);
-  }
-
   return { ok: true };
 }
+

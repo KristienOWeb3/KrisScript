@@ -104,7 +104,7 @@ export default function BillingSuccessPage() {
             <div>
               Plan:{" "}
               <strong>
-                {user.plan === "promax" ? "Pro Max" : user.plan === "pro" ? "Pro" : "Free"}
+                {user.plan === "payg" ? "Pay-As-You-Go" : "Free Trial"}
               </strong>
               {user.planExpiresAt
                 ? ` (until ${new Date(user.planExpiresAt * 1000).toLocaleString()})`

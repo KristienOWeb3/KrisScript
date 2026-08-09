@@ -10,7 +10,7 @@ export type User = {
   email: string;
   password_hash: string;
   activated: number;
-  plan: "free" | "pro" | "promax";
+  plan: "free" | "payg";
   plan_expires_at: number | null;
   payg_enabled: number;
   wallet_address: string | null;

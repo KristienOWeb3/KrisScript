@@ -25,7 +25,7 @@ export default function SignupPage() {
       setBusy(false);
       return;
     }
-    router.push("/activate");
+    router.push("/chat");
   }
 
   return (
@@ -37,27 +37,26 @@ export default function SignupPage() {
               <div className="mark">KS</div>
               <div className="brand-copy">
                 <div className="brand-title">Kris&apos;s Script</div>
-                <div className="brand-meta">Payment verification workspace</div>
+                <div className="brand-meta">Pay-As-You-Go AI Chat</div>
               </div>
             </div>
-            <h1 className="hero-title" style={{ marginTop: 54 }}>Create the test user.</h1>
+            <h1 className="hero-title" style={{ marginTop: 54 }}>Create your account.</h1>
             <p className="subtitle">
-              Your first flow is the $1 activation checkout. Access unlocks from the signed
-              webhook, not from a redirect.
+              Get instant access to AI chat with 3 free trial messages, then pay-as-you-go with SubScript.
             </p>
           </div>
           <div className="auth-preview">
             <div className="terminal-line">signup - account created</div>
-            <div className="terminal-line">checkout - SubScript intent opened</div>
-            <div className="terminal-line">webhook - activation verified</div>
+            <div className="terminal-line">free - 3 trial messages</div>
+            <div className="terminal-line">payg - SubScript metered billing</div>
           </div>
         </section>
         <form className="card" onSubmit={submit}>
-          <span className="badge pro">NEW ACCOUNT</span>
+          <span className="badge pro">INSTANT ACCESS</span>
           <h1 className="brand" style={{ fontSize: "1.8rem", marginTop: 18 }}>
             Join Kris&apos;s Script
           </h1>
-          <p className="subtitle">Create your account. A one-time $1 USDC activation fee applies.</p>
+          <p className="subtitle">Create your account. Start with 3 free messages immediately.</p>
           <label>Email</label>
           <input
             type="email"

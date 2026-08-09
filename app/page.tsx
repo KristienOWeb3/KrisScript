@@ -12,7 +12,7 @@ export default function Home() {
       .then((r) => r.json())
       .then((data) => {
         if (data.user) {
-          router.replace(data.user.activated ? "/chat" : "/activate");
+          router.replace("/chat");
         } else {
           setChecked(true);
         }
@@ -31,21 +31,21 @@ export default function Home() {
               <div className="mark">KS</div>
               <div className="brand-copy">
                 <div className="brand-title">Kris&apos;s Script</div>
-                <div className="brand-meta">SubScript payment lab</div>
+                <div className="brand-meta">Pay-As-You-Go AI Chat</div>
               </div>
             </div>
             <h1 className="hero-title" style={{ marginTop: 54 }}>
-              Chat, then prove every payment claim.
+              Chat immediately. Pay as you go.
             </h1>
             <p className="subtitle" style={{ maxWidth: 560 }}>
-              A focused AI chat workspace built to test SubScript on Arc across one-time
-              activation, recurring weekly subscriptions, and metered pay-as-you-chat billing.
+              A focused AI chat workspace powered by DeepSeek & SubScript. Start with 3 free messages,
+              then pay per message ($0.10/msg) with SubScript Pay-As-You-Go metered billing.
             </p>
           </div>
           <div className="auth-preview">
-            <div className="terminal-line">payment.succeeded - activation unlocked</div>
-            <div className="terminal-line">subscription.renewed - Pro extended 7 days</div>
-            <div className="terminal-line">report-usage - $0.10 metered message</div>
+            <div className="terminal-line">signup - instant chat unlocked</div>
+            <div className="terminal-line">free - 3 trial messages included</div>
+            <div className="terminal-line">report-usage - $0.10 SubScript PAYG</div>
           </div>
         </section>
         <section className="card">
@@ -53,17 +53,16 @@ export default function Home() {
             Kris&apos;s <span>Script</span>
           </h1>
           <p className="subtitle">
-            Start with a one-time $1 USDC activation, then choose free capped chat,
-            weekly Pro, Pro Max, or pay-as-you-chat metering.
+            Sign up now for 3 free messages, then use SubScript Pay-As-You-Go to pay per message.
           </p>
           <a className="btn" href="/signup">
-            Create account - $1 activation
+            Start chatting - 3 free messages
           </a>
           <a className="btn secondary" href="/login">
             Sign in
           </a>
           <p className="muted mt">
-            Powered by DeepSeek replies and SubScript payment events.
+            Powered by DeepSeek AI & SubScript Pay-As-You-Go.
           </p>
         </section>
       </div>

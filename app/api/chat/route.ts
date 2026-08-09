@@ -5,7 +5,6 @@ import { chatCompletion } from "@/lib/deepseek";
 import { hasRealKey, reportUsage } from "@/lib/subscript";
 import {
   FREE_MESSAGE_CAP,
-  PRO_DAILY_CAP,
   PAYG_PRICE_USDC,
   PAYG_PRICE_USDC_MICROS,
   DEV_VAULT_COMMIT_USDC,
@@ -57,48 +56,27 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
-  if (!user.activated) {
-    return Response.json(
-      { error: "Pay the $1 activation fee to start chatting.", reason: "signup_fee" },
-      { status: 402 }
-    );
-  }
 
   const { message, threadId } = (await req.json().catch(() => ({}))) as {
     message?: string;
     threadId?: string;
   };
 
-  if (typeof message !== "string" || !message.trim() || message.length > 4000) {
-    return Response.json({ error: "Message must be 1–4000 characters." }, { status: 400 });
+  if (!message || typeof message !== "string" || !message.trim()) {
+    return Response.json({ error: "Message is required." }, { status: 400 });
   }
 
-  const activeThread = threadId || `thread_${crypto.randomUUID().slice(0, 8)}`;
-
-  const now = Math.floor(Date.now() / 1000);
-  const planActive =
-    (user.plan === "pro" || user.plan === "promax") && (user.plan_expires_at ?? 0) > now;
-
-  let billed: "plan" | "payg" | "free";
+  const activeThread = threadId || "main";
+  let billed: "payg" | "free";
   let nextDevPaygAccrued: string | null = null;
-  if (planActive) {
-    if (user.plan === "pro") {
-      const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
-      const today = await one<{ c: number }>(
-        "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND billed = 'plan' AND created_at >= $2",
-        [user.id, startOfDay]
-      );
-      if ((today?.c ?? 0) >= PRO_DAILY_CAP) {
-        return Response.json(
-          {
-            error: `Pro daily limit reached (${PRO_DAILY_CAP} messages). Upgrade to Pro Max for unlimited.`,
-            reason: "pro_cap",
-          },
-          { status: 402 }
-        );
-      }
-    }
-    billed = "plan";
+
+  const freeUsed = await one<{ c: number }>(
+    "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND billed = 'free'",
+    [user.id]
+  );
+
+  if ((freeUsed?.c ?? 0) < FREE_MESSAGE_CAP) {
+    billed = "free";
   } else if (user.payg_enabled && user.wallet_address) {
     if (!hasRealKey()) {
       const accrued = parseFloat(user.payg_accrued || "0") + parseFloat(PAYG_PRICE_USDC);
@@ -115,20 +93,13 @@ export async function POST(req: Request) {
     }
     billed = "payg";
   } else {
-    const freeUsed = await one<{ c: number }>(
-      "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND billed = 'free'",
-      [user.id]
+    return Response.json(
+      {
+        error: `You have used your ${FREE_MESSAGE_CAP} free trial messages. Enable SubScript Pay-As-You-Go ($${PAYG_PRICE_USDC}/msg) to continue.`,
+        reason: "payg_required",
+      },
+      { status: 402 }
     );
-    if ((freeUsed?.c ?? 0) >= FREE_MESSAGE_CAP) {
-      return Response.json(
-        {
-          error: `Free limit reached (${FREE_MESSAGE_CAP} messages). Upgrade to Pro, Pro Max, or enable pay-as-you-chat.`,
-          reason: "free_cap",
-        },
-        { status: 402 }
-      );
-    }
-    billed = "free";
   }
 
   const { rows: recent } = await q(

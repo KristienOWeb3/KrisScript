@@ -25,7 +25,7 @@ export default function LoginPage() {
       setBusy(false);
       return;
     }
-    router.push(data.activated ? "/chat" : "/activate");
+    router.push("/chat");
   }
 
   return (
@@ -37,13 +37,12 @@ export default function LoginPage() {
               <div className="mark">KS</div>
               <div className="brand-copy">
                 <div className="brand-title">Kris&apos;s Script</div>
-                <div className="brand-meta">Return to the workspace</div>
+                <div className="brand-meta">Pay-As-You-Go AI Chat</div>
               </div>
             </div>
-            <h1 className="hero-title" style={{ marginTop: 54 }}>Pick up the run.</h1>
+            <h1 className="hero-title" style={{ marginTop: 54 }}>Pick up where you left off.</h1>
             <p className="subtitle">
-              Continue validating activation fees, recurring subscription events, and metered
-              chat billing from a single compact workspace.
+              Access your AI chat workspace powered by DeepSeek & SubScript Pay-As-You-Go metered billing.
             </p>
           </div>
           <div className="auth-preview">

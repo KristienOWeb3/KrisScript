@@ -218,13 +218,10 @@ export default function PricingPage() {
         <div className="rail-section" style={{ marginTop: 16 }}>
           <div className="rail-label">Billing Options</div>
           <div className="recent-item">
-            <span className="recent-title">⚡ One-time $1 Activation</span>
+            <span className="recent-title">🎁 3 Free Trial Messages</span>
           </div>
           <div className="recent-item">
-            <span className="recent-title">🔄 Weekly Subscriptions</span>
-          </div>
-          <div className="recent-item">
-            <span className="recent-title">💳 Metered Vault Usage</span>
+            <span className="recent-title">💳 Metered Vault Usage ($0.10/msg)</span>
           </div>
         </div>
 
@@ -233,7 +230,7 @@ export default function PricingPage() {
             <div className="avatar">{user?.email ? user.email.charAt(0).toUpperCase() : "K"}</div>
             <div className="profile-details">
               <span className="profile-name">{user?.email ? user.email.split("@")[0] : "Kristien"}</span>
-              <span className="badge pro">{userPlanLabel}</span>
+              <span className="badge pro">{user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial"}</span>
             </div>
           </div>
         </div>
@@ -246,7 +243,7 @@ export default function PricingPage() {
               ←
             </a>
             <div className="topbar-title">
-              <strong style={{ fontSize: "1rem" }}>Billing & Plans</strong>
+              <strong style={{ fontSize: "1rem" }}>Pay-As-You-Go Billing</strong>
             </div>
           </div>
 
@@ -257,10 +254,10 @@ export default function PricingPage() {
               disabled={isSyncing}
               style={{ fontSize: "0.85rem", padding: "4px 10px" }}
             >
-              {isSyncing ? "Syncing..." : "🔄 Sync & Refresh Status"}
+              {isSyncing ? "Syncing..." : "🔄 Refresh Status"}
             </button>
             {me?.devMode && <span className="badge dev">DEV MODE</span>}
-            {user && <span className="badge pro">{userPlanLabel}</span>}
+            {user && <span className="badge pro">{user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial"}</span>}
           </div>
         </header>
 
@@ -268,10 +265,10 @@ export default function PricingPage() {
           <div className="page-head">
             <div>
               <h1 className="hero-heading" style={{ textAlign: "left", fontSize: "2.2rem" }}>
-                Plans and Billing
+                Pay-As-You-Go Billing
               </h1>
               <p className="subtitle">
-                Select a weekly USDC subscription on Arc via SubScript, or use pay-as-you-chat metered vault.
+                Kris&apos;s Script gives you 3 free trial messages. After 3 messages, pay-as-you-go metered billing ($0.10/msg) is handled seamlessly via your SubScript vault.
               </p>
             </div>
           </div>
@@ -279,44 +276,11 @@ export default function PricingPage() {
           {user && (
             <div className="notice-box user-status-banner">
               <div className="status-banner-left">
-                <span>Current plan: <strong>{userPlanLabel}</strong></span>
-                {user.subStatus && user.plan !== "free" && (
-                  <span> · Status: <strong style={{ color: user.subCancelAtPeriodEnd ? "#ff7b72" : "#65d98f" }}>{user.subCancelAtPeriodEnd ? "Canceled (Period Active)" : user.subStatus}</strong></span>
+                <span>Current Status: <strong>{user?.paygEnabled ? "Pay-As-You-Chat Active" : "Free Trial"}</strong></span>
+                <span> · Trial Used: <strong>{user.freeUsed ?? 0} / 3 free messages</strong></span>
+                {user.paygEnabled && (
+                  <span> · Accrued Usage: <strong>${user.paygAccrued} USDC</strong></span>
                 )}
-                {user.planExpiresAt && (
-                  <span> · {user.subCancelAtPeriodEnd ? "Ends" : "Renews"}: <strong>{new Date(user.planExpiresAt * 1000).toLocaleDateString()}</strong></span>
-                )}
-              </div>
-              {user.plan !== "free" && !user.subCancelAtPeriodEnd && (
-                <button
-                  className="btn ghost small danger-btn"
-                  onClick={cancelSub}
-                  disabled={busy !== ""}
-                >
-                  {busy === "cancel" ? "Cancelling..." : "Cancel Plan"}
-                </button>
-              )}
-            </div>
-          )}
-
-          {user && user.subCancelAtPeriodEnd && user.plan !== "free" && (
-            <div className="notice-box" style={{ borderColor: "#f6c76b", background: "rgba(246, 199, 107, 0.08)", color: "#fef3c7" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                <div>
-                  <strong>Subscription Canceled on Platform</strong>
-                  <p style={{ marginTop: 4, fontSize: "0.84rem", opacity: 0.9 }}>
-                    Your plan stays active on Kris&apos;s Script until period end. You can also click <strong>CANCEL CURRENT PLAN</strong> directly in SubScript DM below.
-                  </p>
-                </div>
-                <a
-                  className="btn secondary small"
-                  style={{ whiteSpace: "nowrap" }}
-                  href="https://dashboard.subscriptonarc.com/user"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  SubScript DM ↗
-                </a>
               </div>
             </div>
           )}
@@ -334,7 +298,7 @@ export default function PricingPage() {
                 <div className="payment-method-radio" />
                 <div className="payment-method-icon">⚡</div>
                 <div className="payment-method-details">
-                  <strong>SubScript</strong>
+                  <strong>SubScript Pay-As-You-Go</strong>
                   <span>USDC on Arc Web3 Wallet</span>
                 </div>
               </div>
@@ -359,76 +323,26 @@ export default function PricingPage() {
               {/* FREE CARD */}
               <div className="plan-card">
                 <div className="plan-card-header">
-                  <h3>Free</h3>
+                  <h3>Free Trial</h3>
                   <div className="price">
-                    $0 <small>/ trial</small>
+                    $0 <small>/ 3 messages</small>
                   </div>
                 </div>
                 <ul className="plan-features">
-                  <li>3 free messages total</li>
-                  <li>DeepSeek-powered AI replies</li>
-                  <li>Ideal for quick testing</li>
+                  <li>3 free DeepSeek AI messages</li>
+                  <li>No payment details required upfront</li>
+                  <li>Instant access upon signup</li>
                 </ul>
                 <button className="btn secondary" disabled>
-                  {user && user.plan === "free" ? "Current plan" : "Included"}
-                </button>
-              </div>
-
-              {/* PRO CARD */}
-              <div className={`plan-card ${user?.plan === "pro" && !user?.subCancelAtPeriodEnd ? "active-plan-card" : ""}`}>
-                <div className="plan-card-header">
-                  <div className="card-title-row">
-                    <h3>Pro</h3>
-                    <span className="badge pro">POPULAR</span>
-                  </div>
-                  <div className="price">
-                    $2 <small>/ week</small>
-                  </div>
-                </div>
-                <ul className="plan-features">
-                  <li>100 messages per day</li>
-                  <li>Auto-renews weekly in USDC</li>
-                  <li>Cancel or re-subscribe anytime</li>
-                </ul>
-                <button
-                  className="btn"
-                  onClick={() => subscribe("pro")}
-                  disabled={isButtonDisabled("pro")}
-                >
-                  {planButtonLabel("pro", "$2/wk")}
-                </button>
-              </div>
-
-              {/* PRO MAX CARD */}
-              <div className={`plan-card featured ${user?.plan === "promax" && !user?.subCancelAtPeriodEnd ? "active-plan-card" : ""}`}>
-                <div className="plan-card-header">
-                  <div className="card-title-row">
-                    <h3>Pro Max</h3>
-                    <span className="badge promax">BEST VALUE</span>
-                  </div>
-                  <div className="price">
-                    $5 <small>/ week</small>
-                  </div>
-                </div>
-                <ul className="plan-features">
-                  <li>✨ Unlimited messages</li>
-                  <li>Auto-renews weekly in USDC</li>
-                  <li>Priority DeepSeek response</li>
-                </ul>
-                <button
-                  className="btn"
-                  onClick={() => subscribe("promax")}
-                  disabled={isButtonDisabled("promax")}
-                >
-                  {planButtonLabel("promax", "$5/wk")}
+                  {!user?.paygEnabled ? "Current mode" : "Completed"}
                 </button>
               </div>
 
               {/* PAYG CARD */}
-              <div className="plan-card payg-card">
+              <div className="plan-card payg-card featured">
                 <div className="plan-card-header">
                   <div className="card-title-row">
-                    <h3>Pay as you chat</h3>
+                    <h3>Pay As You Chat</h3>
                     <span className="badge payg">METERED</span>
                   </div>
                   <div className="price">
@@ -437,7 +351,7 @@ export default function PricingPage() {
                 </div>
                 
                 <div className="payg-setup-box">
-                  <strong className="setup-title">⚡ First-Time PAYG Setup:</strong>
+                  <strong className="setup-title">⚡ First-Time SubScript PAYG Setup:</strong>
                   <ol className="setup-steps">
                     <li>
                       Go to <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer">SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
@@ -450,7 +364,7 @@ export default function PricingPage() {
                     </li>
                   </ol>
 
-                  <label className="input-label">SubScript Vault Address:</label>
+                  <label className="input-label">SubScript Vault / Wallet Address:</label>
                   <input
                     type="text"
                     placeholder="Paste 0x... wallet address"
@@ -462,7 +376,7 @@ export default function PricingPage() {
                   {user?.paygEnabled ? (
                     <div className="payg-action-wrap">
                       <p className="payg-status">
-                        Status: <strong style={{ color: "#65d98f" }}>Active</strong> · Accrued: <strong>${user.paygAccrued}</strong>
+                        Status: <strong style={{ color: "#65d98f" }}>Active Metered Billing</strong> · Accrued: <strong>${user.paygAccrued}</strong>
                       </p>
                       <button
                         className="btn secondary small"

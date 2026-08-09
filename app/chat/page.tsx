@@ -103,10 +103,12 @@ export default function ChatPage() {
   }
 
   const user = me?.user;
-  const planLabel =
-    user?.plan === "promax" ? "Pro Max" : user?.plan === "pro" ? "Pro" : "Free";
-  const badgeClass =
-    user?.plan === "promax" ? "promax" : user?.plan === "pro" ? "pro" : "free";
+  const isPayg = !!user?.paygEnabled;
+  const freeRemaining = Math.max(0, (user?.freeCap ?? 3) - (user?.freeUsed ?? 0));
+  const planLabel = isPayg
+    ? "Pay-As-You-Chat ($0.10/msg)"
+    : `Free Trial (${freeRemaining} left)`;
+  const badgeClass = isPayg ? "pro" : "free";
 
   const userInitials = user?.email ? user.email.charAt(0).toUpperCase() : "K";
 
@@ -237,39 +239,34 @@ export default function ChatPage() {
               <div className="modal-card">
                 <div className="card-row">
                   <div>
-                    <strong>Manage subscription</strong>
+                    <strong>Billing Status</strong>
                     <div className="muted" style={{ fontSize: "0.82rem", marginTop: 2 }}>
-                      Current plan: <strong style={{ color: "#fff" }}>{planLabel}</strong>
-                      {user?.planExpiresAt &&
-                        ` · ${user.subCancelAtPeriodEnd ? "Ends" : "Renews"} ${new Date(
-                          user.planExpiresAt * 1000
-                        ).toLocaleDateString()}`}
+                      Current mode: <strong style={{ color: "#fff" }}>{planLabel}</strong>
                     </div>
                   </div>
                   <a className="btn small" href="/pricing">
-                    {user?.plan === "free" ? "Upgrade" : "Manage"}
+                    Configure PAYG
                   </a>
                 </div>
               </div>
 
               <div className="modal-card">
-                <strong style={{ display: "block", marginBottom: 6 }}>Usage & Allowance</strong>
+                <strong style={{ display: "block", marginBottom: 6 }}>Free Trial Progress</strong>
                 <div className="muted" style={{ fontSize: "0.84rem" }}>
-                  {user?.plan === "promax" && "✨ Unlimited DeepSeek messages included"}
-                  {user?.plan === "pro" && `⚡ ${user.todayCount} / ${user.proDailyCap} messages used today`}
-                  {user?.plan === "free" &&
-                    `💬 ${Math.max(0, user.freeCap - user.freeUsed)} of ${user.freeCap} free messages remaining`}
+                  💬 {Math.max(0, (user?.freeCap ?? 3) - (user?.freeUsed ?? 0))} of {user?.freeCap ?? 3} free trial messages remaining
                 </div>
               </div>
 
-              {user?.paygEnabled && (
-                <div className="modal-card">
-                  <strong style={{ display: "block", marginBottom: 4 }}>Pay-as-you-chat Vault</strong>
-                  <div className="muted" style={{ fontSize: "0.82rem" }}>
-                    Status: <span style={{ color: "#65d98f" }}>Active Metered Billing</span> · Accrued: ${user.paygAccrued}
-                  </div>
+              <div className="modal-card">
+                <strong style={{ display: "block", marginBottom: 4 }}>SubScript Pay-As-You-Chat Vault</strong>
+                <div className="muted" style={{ fontSize: "0.82rem" }}>
+                  Status: {user?.paygEnabled ? (
+                    <span style={{ color: "#65d98f" }}>Active Metered Billing (${user.paygAccrued} accrued)</span>
+                  ) : (
+                    <span style={{ color: "#ff7b72" }}>Not Enabled</span>
+                  )}
                 </div>
-              )}
+              </div>
 
               <button className="btn secondary danger-btn" onClick={logout} style={{ marginTop: 14 }}>
                 Log out
@@ -340,12 +337,9 @@ export default function ChatPage() {
 
                     {planDropdownOpen && (
                       <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                        <div className="dropdown-item header">Current Plan: {planLabel}</div>
+                        <div className="dropdown-item header">Status: {planLabel}</div>
                         <a className="dropdown-item" href="/pricing">
-                          ⚡ Upgrade or Manage Subscription
-                        </a>
-                        <a className="dropdown-item" href="/pricing">
-                          💳 Metered Vault Billing (PAYG)
+                          ⚡ SubScript Pay-As-You-Chat Setup
                         </a>
                       </div>
                     )}
@@ -359,21 +353,21 @@ export default function ChatPage() {
                 <div className="prompt-row">
                   <div
                     className="prompt-chip"
-                    onClick={() => sendText("Explain how my current plan is billed.")}
+                    onClick={() => sendText("Explain how SubScript Pay-As-You-Go works.")}
                   >
-                    Explain how my current plan is billed.
+                    Explain how SubScript Pay-As-You-Go works.
                   </div>
                   <div
                     className="prompt-chip"
-                    onClick={() => sendText("Draft a SubScript webhook test checklist.")}
+                    onClick={() => sendText("How do 3 free trial messages work?")}
                   >
-                    Draft a SubScript webhook test checklist.
+                    How do 3 free trial messages work?
                   </div>
                   <div
                     className="prompt-chip"
-                    onClick={() => sendText("Compare PAYG vs weekly plans for this app.")}
+                    onClick={() => sendText("Draft a SubScript metered usage test checklist.")}
                   >
-                    Compare PAYG vs weekly plans for this app.
+                    Draft a SubScript metered usage test checklist.
                   </div>
                 </div>
               </section>
