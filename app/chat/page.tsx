@@ -20,6 +20,38 @@ export default function ChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+  const [paygWalletInput, setPaygWalletInput] = useState("");
+  const [paygSaving, setPaygSaving] = useState(false);
+  const [copiedMerchant, setCopiedMerchant] = useState(false);
+
+  function copyMerchantName() {
+    navigator.clipboard.writeText("okechukwuanigba.sub");
+    setCopiedMerchant(true);
+    setTimeout(() => setCopiedMerchant(false), 2000);
+  }
+
+  async function enablePayg() {
+    if (!paygWalletInput.trim()) return;
+    setPaygSaving(true);
+    try {
+      const res = await fetch("/api/billing/payg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true, walletAddress: paygWalletInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBlocked(null);
+        await loadMe();
+      } else {
+        alert(data.error || "Failed to save Pay-as-you-chat.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setPaygSaving(false);
+    }
+  }
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -391,11 +423,52 @@ export default function ChatPage() {
             {busy && <div className="msg assistant muted">Thinking...</div>}
 
             {blocked && (
-              <div className="error-box" style={{ alignSelf: "center", textAlign: "center" }}>
-                {blocked.error}
-                <div style={{ marginTop: 10 }}>
-                  <a className="btn small" href="/pricing" style={{ width: "auto" }}>
-                    {blocked.reason === "vault" ? "Manage pay-as-you-chat" : "See plans"}
+              <div className="error-box" style={{ alignSelf: "center", maxWidth: 540, width: "100%", padding: 20 }}>
+                <strong style={{ fontSize: "1rem", color: "#ff7b72" }}>{blocked.error}</strong>
+                
+                <div style={{ marginTop: 14, textAlign: "left", background: "#0d121c", padding: 14, borderRadius: 10, border: "1px solid var(--line)" }}>
+                  <span style={{ fontSize: "0.84rem", color: "#65d98f", fontWeight: 650, display: "block", marginBottom: 6 }}>
+                    ⚡ Enable SubScript Pay-As-You-Go ($0.10/msg):
+                  </span>
+                  <ol style={{ margin: "0 0 10px 0", paddingLeft: 18, fontSize: "0.8rem", color: "var(--muted)" }}>
+                    <li>
+                      Visit <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer" style={{ color: "#60a5fa" }}>SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
+                    </li>
+                    <li>
+                      Commit to Merchant Name:{" "}
+                      <button
+                        type="button"
+                        onClick={copyMerchantName}
+                        className="merchant-tag-btn"
+                        title="Click to copy merchant name"
+                      >
+                        <code className="merchant-tag">okechukwuanigba.sub</code>
+                        <span className="copy-badge">{copiedMerchant ? "✓ Copied!" : "📋 Copy"}</span>
+                      </button>
+                    </li>
+                  </ol>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <input
+                      type="text"
+                      placeholder="Paste SubScript Commit ID (cmt_...) or 0x... address"
+                      value={paygWalletInput}
+                      onChange={(e) => setPaygWalletInput(e.target.value)}
+                      style={{ fontSize: "0.82rem", height: 38 }}
+                    />
+                    <button
+                      className="btn small"
+                      style={{ width: "auto", whiteSpace: "nowrap" }}
+                      onClick={enablePayg}
+                      disabled={paygSaving || !paygWalletInput.trim()}
+                    >
+                      {paygSaving ? "Saving..." : "Activate PAYG"}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 10 }}>
+                  <a className="btn ghost small" href="/pricing">
+                    Manage on Billing Page ↗
                   </a>
                 </div>
               </div>
@@ -432,12 +505,9 @@ export default function ChatPage() {
 
                   {planDropdownOpen && (
                     <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                      <div className="dropdown-item header">Current Plan: {planLabel}</div>
+                      <div className="dropdown-item header">Status: {planLabel}</div>
                       <a className="dropdown-item" href="/pricing">
-                        ⚡ Upgrade or Manage Subscription
-                      </a>
-                      <a className="dropdown-item" href="/pricing">
-                        💳 Metered Vault Billing (PAYG)
+                        ⚡ SubScript Pay-As-You-Chat Setup
                       </a>
                     </div>
                   )}

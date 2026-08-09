@@ -24,6 +24,13 @@ export default function PricingPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
   const [paygWalletInput, setPaygWalletInput] = useState("");
+  const [copiedMerchant, setCopiedMerchant] = useState(false);
+
+  function copyMerchantName() {
+    navigator.clipboard.writeText("okechukwuanigba.sub");
+    setCopiedMerchant(true);
+    setTimeout(() => setCopiedMerchant(false), 2000);
+  }
 
   function showToast(msg: string) {
     setToastMessage(msg);
@@ -357,7 +364,16 @@ export default function PricingPage() {
                       Go to <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer">SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
                     </li>
                     <li>
-                      Click <strong>&quot;Commit to a service&quot;</strong> and enter Merchant Name: <code className="merchant-tag">Subscript.sub</code>.
+                      Click <strong>&quot;Commit to a service&quot;</strong> and enter Merchant Name:{" "}
+                      <button
+                        type="button"
+                        onClick={copyMerchantName}
+                        className="merchant-tag-btn"
+                        title="Click to copy merchant name"
+                      >
+                        <code className="merchant-tag">okechukwuanigba.sub</code>
+                        <span className="copy-badge">{copiedMerchant ? "✓ Copied!" : "📋 Copy"}</span>
+                      </button>
                     </li>
                     <li>
                       Commit min <strong>$2 USDC</strong> to activate vault.
