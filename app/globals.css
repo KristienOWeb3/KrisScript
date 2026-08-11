@@ -323,6 +323,12 @@ input:focus {
   background: rgba(246, 199, 107, 0.08);
 }
 
+.badge.ultra {
+  color: #f472b6;
+  border-color: rgba(244, 114, 182, 0.28);
+  background: rgba(244, 114, 182, 0.06);
+}
+
 .badge.payg,
 .badge.dev {
   color: var(--green);

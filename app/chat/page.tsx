@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import LoadingOrbit from "../components/LoadingOrbit";
+import PillPromptBar from "../components/PillPromptBar";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
@@ -149,7 +151,7 @@ export default function ChatPage() {
   );
 
   return (
-    <div className={`app-shell chat-shell wireframe-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell chat-shell wireframe-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} container`}>
       {/* SIDEBAR DRAWER OVERLAY */}
       {sidebarOpen && (
         <div className="drawer-overlay" onClick={() => setSidebarOpen(false)} />
@@ -309,7 +311,7 @@ export default function ChatPage() {
       )}
 
       {/* MAIN CHAT AREA */}
-      <section className="app-main">
+      <section className="app-main ui-card">
         {/* TOPBAR HEADER */}
         <header className="topbar">
           <div className="topbar-left">
@@ -342,45 +344,25 @@ export default function ChatPage() {
                 <h1 className="hero-heading">What should we focus on?</h1>
 
                 {/* CENTERED DESKTOP FLOATING COMPOSER (WIREFRAME DESKTOP) */}
-                <form className="chat-composer desktop-centered-pill" onSubmit={send}>
-                  <button className="composer-action-btn" type="button" title="Attach / Options">
-                    +
-                  </button>
-
-                  <input
-                    type="text"
+                <div className="desktop-centered-pill">
+                  <PillPromptBar
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Ask Kris"
-                    maxLength={4000}
+                    onChange={(v) => setInput(v)}
+                    onSubmit={() => sendText(input)}
+                    disabled={!!busy}
+                    planLabel={planLabel}
+                    onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
                   />
 
-                  {/* EMBEDDED PLAN SELECTOR PILL INSIDE INPUT BAR (EXACT WIREFRAME MATCH) */}
-                  <div className="embedded-plan-wrap">
-                    <button
-                      className="embedded-plan-pill"
-                      type="button"
-                      onClick={() => setPlanDropdownOpen(!planDropdownOpen)}
-                    >
-                      <span className="dot">•</span>
-                      <span>{planLabel}</span>
-                      <span className="caret">⌄</span>
-                    </button>
-
-                    {planDropdownOpen && (
-                      <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                        <div className="dropdown-item header">Status: {planLabel}</div>
-                        <a className="dropdown-item" href="/pricing">
-                          ⚡ SubScript Pay-As-You-Chat Setup
-                        </a>
-                      </div>
-                    )}
-                  </div>
-
-                  <button className="composer-send-btn" disabled={busy || !input.trim()} title="Send">
-                    ↑
-                  </button>
-                </form>
+                  {planDropdownOpen && (
+                    <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+                      <div className="dropdown-item header">Status: {planLabel}</div>
+                      <a className="dropdown-item" href="/pricing">
+                        ⚡ SubScript Pay-As-You-Chat Setup
+                      </a>
+                    </div>
+                  )}
+                </div>
 
                 <div className="prompt-row">
                   <div
@@ -420,7 +402,11 @@ export default function ChatPage() {
               </div>
             ))}
 
-            {busy && <div className="msg assistant muted">Thinking...</div>}
+            {busy && (
+              <div className="msg assistant muted">
+                <LoadingOrbit size={36} />
+              </div>
+            )}
 
             {blocked && (
               <div className="error-box" style={{ alignSelf: "center", maxWidth: 540, width: "100%", padding: 20 }}>
@@ -477,48 +463,27 @@ export default function ChatPage() {
           </div>
 
           {/* FLOATING COMPOSER PILL WHEN ACTIVE MESSAGES EXIST */}
-          {messages.length > 0 && (
-            <div className="chat-composer-wrap">
-              <form className="chat-composer floating-pill" onSubmit={send}>
-                <button className="composer-action-btn" type="button" title="Attach / Options">
-                  +
-                </button>
-
-                <input
-                  type="text"
+            {messages.length > 0 && (
+              <div className="chat-composer-wrap">
+                <PillPromptBar
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask Kris"
-                  maxLength={4000}
+                  onChange={(v) => setInput(v)}
+                  onSubmit={() => sendText(input)}
+                  disabled={!!busy}
+                  planLabel={planLabel}
+                  onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
                 />
 
-                <div className="embedded-plan-wrap">
-                  <button
-                    className="embedded-plan-pill"
-                    type="button"
-                    onClick={() => setPlanDropdownOpen(!planDropdownOpen)}
-                  >
-                    <span className="dot">•</span>
-                    <span>{planLabel}</span>
-                    <span className="caret">⌄</span>
-                  </button>
-
-                  {planDropdownOpen && (
-                    <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                      <div className="dropdown-item header">Status: {planLabel}</div>
-                      <a className="dropdown-item" href="/pricing">
-                        ⚡ SubScript Pay-As-You-Chat Setup
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                <button className="composer-send-btn" disabled={busy || !input.trim()} title="Send">
-                  ↑
-                </button>
-              </form>
-            </div>
-          )}
+                {planDropdownOpen && (
+                  <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+                    <div className="dropdown-item header">Status: {planLabel}</div>
+                    <a className="dropdown-item" href="/pricing">
+                      ⚡ SubScript Pay-As-You-Chat Setup
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
         </main>
       </section>
     </div>

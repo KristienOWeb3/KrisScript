@@ -78,7 +78,7 @@ export default function PricingPage() {
     }
   }
 
-  async function subscribe(product: "pro" | "promax") {
+  async function subscribe(product: "pro" | "promax" | "ultra") {
     if (paymentMethod === "card") return;
     setBusy(product);
     setError("");
@@ -142,14 +142,14 @@ export default function PricingPage() {
 
   const user = me?.user;
   const now = Math.floor(Date.now() / 1000);
-  const PLAN_LEVELS: Record<string, number> = { free: 0, pro: 1, promax: 2 };
+  const PLAN_LEVELS: Record<string, number> = { free: 0, pro: 1, promax: 2, ultra: 3 };
   const currentPlanActive =
     (user?.plan === "pro" || user?.plan === "promax") &&
     (user?.planExpiresAt ?? 0) > now &&
     !user?.subCancelAtPeriodEnd;
   const userLevel = currentPlanActive ? (PLAN_LEVELS[user?.plan] ?? 0) : 0;
 
-  const isHigherPlanActive = (p: "pro" | "promax") => userLevel > PLAN_LEVELS[p];
+  const isHigherPlanActive = (p: "pro" | "promax" | "ultra") => userLevel > PLAN_LEVELS[p];
 
   const secondsRemaining = (user?.planExpiresAt ?? 0) - now;
   const isWithinSixHours = secondsRemaining <= 6 * 3600;
@@ -159,7 +159,7 @@ export default function PricingPage() {
     user?.planExpiresAt &&
     !user?.subCancelAtPeriodEnd;
 
-  function planButtonLabel(p: "pro" | "promax", price: string) {
+  function planButtonLabel(p: "pro" | "promax" | "ultra", price: string) {
     if (busy === p) return "Creating subscription...";
     if (isHigherPlanActive(p)) return "Included in Pro Max";
     if (user?.plan === p && user?.subCancelAtPeriodEnd) return `Re-subscribe - ${price}`;
@@ -170,7 +170,7 @@ export default function PricingPage() {
     return `Subscribe - ${price}`;
   }
 
-  function isButtonDisabled(p: "pro" | "promax") {
+  function isButtonDisabled(p: "pro" | "promax" | "ultra") {
     if (busy !== "") return true;
     if (isHigherPlanActive(p)) return true;
     if (activeSub(p) && !isWithinSixHours) return true;
@@ -178,10 +178,16 @@ export default function PricingPage() {
   }
 
   const userPlanLabel =
-    user?.plan === "promax" ? "Pro Max" : user?.plan === "pro" ? "Pro" : "Free";
+    user?.plan === "ultra"
+      ? "Ultra"
+      : user?.plan === "promax"
+      ? "Pro Max"
+      : user?.plan === "pro"
+      ? "Pro"
+      : "Free";
 
   return (
-    <div className="app-shell">
+    <div className="app-shell container">
       {/* TOAST NOTIFICATION POPUP */}
       {toastMessage && (
         <div
@@ -328,7 +334,7 @@ export default function PricingPage() {
           <div className="plans-horizontal-wrap">
             <div className="plans plans-horizontal">
               {/* FREE CARD */}
-              <div className="plan-card">
+              <div className="plan-card ui-card">
                 <div className="plan-card-header">
                   <h3>Free Trial</h3>
                   <div className="price">
@@ -345,8 +351,77 @@ export default function PricingPage() {
                 </button>
               </div>
 
+              {/* PRO CARD */}
+              <div className={`plan-card ${activeSub("pro") ? "active-plan-card" : ""}`}>
+                <div className="plan-card-header">
+                  <h3>Pro</h3>
+                  <div className="price">
+                    $2 <small>/ month</small>
+                  </div>
+                </div>
+                <ul className="plan-features">
+                  <li>20 messages per month</li>
+                  <li>Priority model access</li>
+                  <li>Email support</li>
+                </ul>
+                <button
+                  className="btn"
+                  onClick={() => subscribe("pro")}
+                  disabled={isButtonDisabled("pro")}
+                >
+                  {planButtonLabel("pro", "$2/mo")}
+                </button>
+              </div>
+
+              {/* PRO MAX CARD */}
+              <div className={`plan-card ${activeSub("promax") ? "active-plan-card" : ""}`}>
+                <div className="plan-card-header">
+                  <h3>Pro Max</h3>
+                  <div className="price">
+                    $5 <small>/ month</small>
+                  </div>
+                </div>
+                <ul className="plan-features">
+                  <li>50 messages per month</li>
+                  <li>Faster responses</li>
+                  <li>Priority support</li>
+                </ul>
+                <button
+                  className="btn"
+                  onClick={() => subscribe("promax")}
+                  disabled={isButtonDisabled("promax")}
+                >
+                  {planButtonLabel("promax", "$5/mo")}
+                </button>
+              </div>
+
+              {/* ULTRA CARD */}
+              <div className={`plan-card featured ${activeSub("ultra") ? "active-plan-card" : ""}`}>
+                <div className="plan-card-header">
+                  <div className="card-title-row">
+                    <h3>Ultra</h3>
+                    <span className="badge pro">Best Value</span>
+                  </div>
+                  <div className="price">
+                    $20 <small>/ month</small>
+                  </div>
+                </div>
+                <ul className="plan-features">
+                  <li>200 messages per month</li>
+                  <li>Highest throughput & priority</li>
+                  <li>Dedicated support</li>
+                </ul>
+                <button
+                  className="btn"
+                  onClick={() => subscribe("ultra")}
+                  disabled={isButtonDisabled("ultra")}
+                >
+                  {planButtonLabel("ultra", "$20/mo")}
+                </button>
+              </div>
+
               {/* PAYG CARD */}
-              <div className="plan-card payg-card featured">
+              <div className="plan-card payg-card featured ui-card">
                 <div className="plan-card-header">
                   <div className="card-title-row">
                     <h3>Pay As You Chat</h3>

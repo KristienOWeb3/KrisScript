@@ -1,0 +1,113 @@
+/* Lightweight Beautiful UI–inspired theme: variables and basic utilities */
+:root{
+  --bg:#0b1020;
+  --panel:#0e1724;
+  --muted:#9aa4b2;
+  --muted-2:#6b7280;
+  --line:rgba(255,255,255,0.04);
+  --line-strong:rgba(255,255,255,0.07);
+  --blue:#60a5fa;
+  --amber:#f6c76b;
+  --green:#65d98f;
+  --pink:#f472b6;
+  --glass:rgba(255,255,255,0.03);
+  --shadow: 0 8px 30px rgba(2,6,23,0.6);
+  --radius:12px;
+  font-synthesis: none;
+}
+
+/* Base page layout improvements inspired by Beautiful UI */
+html,body{
+  height:100%;
+  background: linear-gradient(180deg,var(--bg), #071020 70%);
+  color:#e6eef6;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+.container{
+  max-width:1100px;
+  margin:0 auto;
+  padding: 20px;
+}
+
+/* Card */
+.ui-card{
+  background: linear-gradient(180deg,var(--panel), rgba(9,14,24,0.6));
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:18px;
+  box-shadow:var(--shadow);
+}
+
+/* Buttons */
+.btn{
+  background: linear-gradient(90deg,var(--blue), #8b5cf6);
+  color:white;
+  border:0;
+  padding:10px 14px;
+  border-radius:10px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.btn.ghost{
+  background:transparent;
+  border:1px solid var(--line-strong);
+  color:var(--muted);
+}
+
+.btn.secondary{
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.06);
+  color:var(--muted);
+}
+
+/* Utilities */
+.flex{display:flex}
+.items-center{align-items:center}
+.justify-between{justify-content:space-between}
+.gap-12{gap:12px}
+
+/* Typography */
+.hero-heading{font-size:2rem;margin:0 0 8px}
+.subtitle{color:var(--muted);margin:0 0 18px}
+
+/* Responsive tweaks */
+@media (max-width:800px){
+  .plans-horizontal{grid-template-columns:repeat(1, minmax(240px,1fr));}
+  .hero-heading{font-size:1.6rem}
+}
+
+/* Loading orbit (three-dot orbital loader) */
+.loading-orbit{
+  display:inline-grid;
+  place-items:center;
+  position:relative;
+}
+.loading-orbit .orbit-dot{
+  width:10px;height:10px;border-radius:50%;background:linear-gradient(90deg,var(--blue),var(--pink));
+  position:absolute;opacity:0.95;
+  animation:orbit 1.2s linear infinite;
+}
+.loading-orbit .orbit-dot:nth-child(1){ transform-origin:50% 50%; animation-delay:0s }
+.loading-orbit .orbit-dot:nth-child(2){ transform-origin:50% 50%; animation-delay:0.18s }
+.loading-orbit .orbit-dot:nth-child(3){ transform-origin:50% 50%; animation-delay:0.36s }
+
+@keyframes orbit{
+  0%{transform: translate3d(0,-14px,0) scale(0.9);opacity:0.9}
+  33%{transform: translate3d(12px,7px,0) scale(1);opacity:1}
+  66%{transform: translate3d(-12px,7px,0) scale(0.95);opacity:0.9}
+  100%{transform: translate3d(0,-14px,0) scale(0.9);opacity:0.9}
+}
+
+/* Pill prompt bar styles */
+.pill-prompt{display:flex;align-items:center;gap:8px;width:100%;background:linear-gradient(90deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--line);padding:8px;border-radius:999px}
+.pill-input{flex:1;background:transparent;border:0;color:inherit;font-size:0.96rem;outline:none;padding:8px}
+.composer-action-btn{background:transparent;border:0;color:var(--muted);font-weight:700;padding:6px 8px;border-radius:8px}
+.composer-send-btn{background:linear-gradient(90deg,var(--blue),#8b5cf6);border:0;color:white;padding:8px 12px;border-radius:999px;font-weight:700;cursor:pointer}
+.embedded-plan-pill{background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted);padding:6px 10px;border-radius:999px;display:flex;align-items:center;gap:8px}
+
+.prompt-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.prompt-chip{background:rgba(255,255,255,0.02);padding:8px 12px;border-radius:999px;color:var(--muted);cursor:pointer}
