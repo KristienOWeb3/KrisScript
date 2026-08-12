@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import LoadingOrbit from "../components/LoadingOrbit";
+import { LoadingOrbit } from "../components/LoadingOrbit";
 import PillPromptBar from "../components/PillPromptBar";
+import ThinkingTrace from "../components/ThinkingTrace";
+import CodeBlock from "../components/CodeBlock";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
@@ -126,11 +128,6 @@ export default function ChatPage() {
     loadMe();
   }
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    await sendText(input);
-  }
-
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
@@ -143,21 +140,38 @@ export default function ChatPage() {
     ? "Pay-As-You-Chat ($0.10/msg)"
     : `Free Trial (${freeRemaining} left)`;
   const badgeClass = isPayg ? "pro" : "free";
-
   const userInitials = user?.email ? user.email.charAt(0).toUpperCase() : "K";
+  const userName = user?.email ? user.email.split("@")[0] : "Kristien";
 
   const filteredRecents = recents.filter((r) =>
     r.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  function renderMessageContent(content: string) {
+    const codeMatch = content.match(/```(\w+)?\n([\s\S]*?)```/);
+    if (codeMatch) {
+      const lang = codeMatch[1] || "javascript";
+      const code = codeMatch[2];
+      const parts = content.split(/```[\s\S]*?```/);
+      return (
+        <div>
+          {parts[0] && <div style={{ marginBottom: 8 }}>{parts[0]}</div>}
+          <CodeBlock code={code} language={lang} />
+          {parts[1] && <div style={{ marginTop: 8 }}>{parts[1]}</div>}
+        </div>
+      );
+    }
+    return <div>{content}</div>;
+  }
+
   return (
-    <div className={`app-shell chat-shell wireframe-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} container`}>
+    <div className={`app-shell chat-shell wireframe-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       {/* SIDEBAR DRAWER OVERLAY */}
       {sidebarOpen && (
         <div className="drawer-overlay" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* LEFT SIDEBAR (WIREFRAME DESKTOP + MOBILE) */}
+      {/* LEFT SIDEBAR NAV */}
       <aside className={`rail ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="rail-header">
           <div className="rail-brand">
@@ -168,30 +182,21 @@ export default function ChatPage() {
               />
               <defs>
                 <linearGradient id="sidebarSparkGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#60a5fa" />
-                  <stop offset="0.5" stopColor="#a855f7" />
-                  <stop offset="1" stopColor="#f43f5e" />
+                  <stop stopColor="#3d9aff" />
+                  <stop offset="0.5" stopColor="#8b5cf6" />
+                  <stop offset="1" stopColor="#ee5c61" />
                 </linearGradient>
               </defs>
             </svg>
             <div className="brand-title">Kris&apos;s Script</div>
           </div>
-          <div className="rail-header-actions">
-            <button
-              className="icon-btn collapse-toggle-btn"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              title="Collapse sidebar"
-            >
-              ◧
-            </button>
-            <button
-              className="icon-btn drawer-close"
-              onClick={() => setSidebarOpen(false)}
-              title="Close menu"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            className="icon-btn collapse-toggle-btn"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title="Collapse sidebar"
+          >
+            ◧
+          </button>
         </div>
 
         <div className="drawer-actions">
@@ -211,9 +216,9 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* RECENTS SECTION ONLY (Strict rule: No notebooks, no image/video) */}
+        {/* RECENTS SECTION */}
         <div className="rail-section recents-section">
-          <div className="rail-label">Recents</div>
+          <span className="rail-label">Recents</span>
           <div className="recents-list">
             {filteredRecents.length === 0 ? (
               <div className="empty-recents">No recent chats</div>
@@ -236,7 +241,7 @@ export default function ChatPage() {
           <div className="profile-info">
             <div className="avatar">{userInitials}</div>
             <div className="profile-details">
-              <span className="profile-name">{user?.email ? user.email.split("@")[0] : "Kristien"}</span>
+              <span className="profile-name">{userName}</span>
               <span className={`badge ${badgeClass}`}>{planLabel}</span>
             </div>
           </div>
@@ -246,14 +251,14 @@ export default function ChatPage() {
               e.stopPropagation();
               setProfileModalOpen(true);
             }}
-            title="Account & Subscription"
+            title="Settings & Account"
           >
             ⚙️
           </button>
         </div>
       </aside>
 
-      {/* USER PROFILE & ACCOUNT MODAL (WIREFRAME 3) */}
+      {/* USER PROFILE & ACCOUNT MODAL */}
       {profileModalOpen && (
         <div className="modal-overlay" onClick={() => setProfileModalOpen(false)}>
           <div className="modal-content profile-modal" onClick={(e) => e.stopPropagation()}>
@@ -266,7 +271,7 @@ export default function ChatPage() {
 
             <div className="profile-hero">
               <div className="avatar large">{userInitials}</div>
-              <h2>Hi, {user?.email ? user.email.split("@")[0] : "Kristien"}!</h2>
+              <h2>Hi, {userName}!</h2>
             </div>
 
             <div className="modal-body">
@@ -275,7 +280,7 @@ export default function ChatPage() {
                   <div>
                     <strong>Billing Status</strong>
                     <div className="muted" style={{ fontSize: "0.82rem", marginTop: 2 }}>
-                      Current mode: <strong style={{ color: "#fff" }}>{planLabel}</strong>
+                      Current mode: <strong style={{ color: "#3d9aff" }}>{planLabel}</strong>
                     </div>
                   </div>
                   <a className="btn small" href="/pricing">
@@ -287,7 +292,7 @@ export default function ChatPage() {
               <div className="modal-card">
                 <strong style={{ display: "block", marginBottom: 6 }}>Free Trial Progress</strong>
                 <div className="muted" style={{ fontSize: "0.84rem" }}>
-                  💬 {Math.max(0, (user?.freeCap ?? 3) - (user?.freeUsed ?? 0))} of {user?.freeCap ?? 3} free trial messages remaining
+                  💬 {freeRemaining} of {user?.freeCap ?? 3} free trial messages remaining
                 </div>
               </div>
 
@@ -295,9 +300,9 @@ export default function ChatPage() {
                 <strong style={{ display: "block", marginBottom: 4 }}>SubScript Pay-As-You-Chat Vault</strong>
                 <div className="muted" style={{ fontSize: "0.82rem" }}>
                   Status: {user?.paygEnabled ? (
-                    <span style={{ color: "#65d98f" }}>Active Metered Billing (${user.paygAccrued} accrued)</span>
+                    <span style={{ color: "#3dbb72" }}>Active Metered Billing (${user.paygAccrued} accrued)</span>
                   ) : (
-                    <span style={{ color: "#ff7b72" }}>Not Enabled</span>
+                    <span style={{ color: "#ee5c61" }}>Not Enabled</span>
                   )}
                 </div>
               </div>
@@ -310,9 +315,8 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* MAIN CHAT AREA */}
+      {/* MAIN CHAT CANVAS */}
       <section className="app-main ui-card">
-        {/* TOPBAR HEADER */}
         <header className="topbar">
           <div className="topbar-left">
             {(sidebarCollapsed || !sidebarOpen) && (
@@ -336,14 +340,13 @@ export default function ChatPage() {
           </div>
         </header>
 
-        {/* MAIN MESSAGES CANVAS */}
+        {/* MESSAGES AREA */}
         <main className="chat-main">
           <div className="chat-messages">
             {messages.length === 0 && (
               <section className="empty-state wireframe-empty desktop-hero">
                 <h1 className="hero-heading">What should we focus on?</h1>
 
-                {/* CENTERED DESKTOP FLOATING COMPOSER (WIREFRAME DESKTOP) */}
                 <div className="desktop-centered-pill">
                   <PillPromptBar
                     value={input}
@@ -379,9 +382,9 @@ export default function ChatPage() {
                   </div>
                   <div
                     className="prompt-chip"
-                    onClick={() => sendText("Draft a SubScript metered usage test checklist.")}
+                    onClick={() => sendText("Draft a code snippet using Beautiful UI components.")}
                   >
-                    Draft a SubScript metered usage test checklist.
+                    Draft a code snippet using Beautiful UI components.
                   </div>
                 </div>
               </section>
@@ -389,14 +392,17 @@ export default function ChatPage() {
 
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
-                {m.content}
+                {m.role === "assistant" && i === messages.length - 1 && (
+                  <ThinkingTrace duration="1.2s" />
+                )}
+
+                {renderMessageContent(m.content)}
+
                 {m.role === "user" && m.billed && (
                   <span className="bill-tag">
                     {m.billed === "free"
                       ? "free message"
-                      : m.billed === "plan"
-                        ? "included in plan"
-                        : "billed $0.10 (pay-as-you-chat)"}
+                      : "billed $0.10 (pay-as-you-chat)"}
                   </span>
                 )}
               </div>
@@ -404,21 +410,24 @@ export default function ChatPage() {
 
             {busy && (
               <div className="msg assistant muted">
-                <LoadingOrbit size={36} />
+                <ThinkingTrace defaultExpanded steps={[
+                  { id: "1", label: "Generating response with Kris's Script...", status: "running" }
+                ]} />
+                <LoadingOrbit text="Kris's Script is thinking..." />
               </div>
             )}
 
             {blocked && (
               <div className="error-box" style={{ alignSelf: "center", maxWidth: 540, width: "100%", padding: 20 }}>
-                <strong style={{ fontSize: "1rem", color: "#ff7b72" }}>{blocked.error}</strong>
-                
-                <div style={{ marginTop: 14, textAlign: "left", background: "#0d121c", padding: 14, borderRadius: 10, border: "1px solid var(--line)" }}>
-                  <span style={{ fontSize: "0.84rem", color: "#65d98f", fontWeight: 650, display: "block", marginBottom: 6 }}>
+                <strong style={{ fontSize: "1rem", color: "#ee5c61" }}>{blocked.error}</strong>
+
+                <div style={{ marginTop: 14, textAlign: "left", background: "#1c1d1f", padding: 14, borderRadius: 10, border: "1px solid var(--line-strong)" }}>
+                  <span style={{ fontSize: "0.84rem", color: "#3dbb72", fontWeight: 650, display: "block", marginBottom: 6 }}>
                     ⚡ Enable SubScript Pay-As-You-Go ($0.10/msg):
                   </span>
-                  <ol style={{ margin: "0 0 10px 0", paddingLeft: 18, fontSize: "0.8rem", color: "var(--muted)" }}>
+                  <ol style={{ margin: "0 0 10px 0", paddingLeft: 18, fontSize: "0.82rem", color: "var(--ink-2)" }}>
                     <li>
-                      Visit <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer" style={{ color: "#60a5fa" }}>SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
+                      Visit <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer" style={{ color: "#3d9aff" }}>SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
                     </li>
                     <li>
                       Commit to Merchant Name:{" "}
@@ -452,7 +461,7 @@ export default function ChatPage() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 10 }}>
+                <div style={{ marginTop: 12, textAlign: "center" }}>
                   <a className="btn ghost small" href="/pricing">
                     Manage on Billing Page ↗
                   </a>
@@ -462,28 +471,27 @@ export default function ChatPage() {
             <div ref={bottomRef} />
           </div>
 
-          {/* FLOATING COMPOSER PILL WHEN ACTIVE MESSAGES EXIST */}
-            {messages.length > 0 && (
-              <div className="chat-composer-wrap">
-                <PillPromptBar
-                  value={input}
-                  onChange={(v) => setInput(v)}
-                  onSubmit={() => sendText(input)}
-                  disabled={!!busy}
-                  planLabel={planLabel}
-                  onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
-                />
+          {messages.length > 0 && (
+            <div className="chat-composer-wrap">
+              <PillPromptBar
+                value={input}
+                onChange={(v) => setInput(v)}
+                onSubmit={() => sendText(input)}
+                disabled={!!busy}
+                planLabel={planLabel}
+                onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
+              />
 
-                {planDropdownOpen && (
-                  <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                    <div className="dropdown-item header">Status: {planLabel}</div>
-                    <a className="dropdown-item" href="/pricing">
-                      ⚡ SubScript Pay-As-You-Chat Setup
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
+              {planDropdownOpen && (
+                <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+                  <div className="dropdown-item header">Status: {planLabel}</div>
+                  <a className="dropdown-item" href="/pricing">
+                    ⚡ SubScript Pay-As-You-Chat Setup
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </section>
     </div>

@@ -78,50 +78,6 @@ export default function PricingPage() {
     }
   }
 
-  async function subscribe(product: "pro" | "promax" | "ultra") {
-    if (paymentMethod === "card") return;
-    setBusy(product);
-    setError("");
-    const res = await fetch("/api/billing/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, paymentMethod: "subscript" }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error + (data.requestId ? ` (request_id: ${data.requestId})` : ""));
-      setBusy("");
-      return;
-    }
-    showToast("Redirecting to SubScript checkout...");
-    window.location.href = data.checkoutUrl;
-  }
-
-  async function cancelSub() {
-    setBusy("cancel");
-    setError("");
-    const res = await fetch("/api/billing/cancel-subscription", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Failed to cancel subscription.");
-    } else {
-      showToast("Subscription canceled. Access remains active until period end.");
-      setMe((prev: any) =>
-        prev
-          ? {
-              ...prev,
-              user: {
-                ...prev.user,
-                subCancelAtPeriodEnd: true,
-                subStatus: "canceled",
-              },
-            }
-          : prev
-      );
-    }
-    setBusy("");
-  }
-
   async function setPayg(enabled: boolean) {
     setBusy("payg");
     setError("");
@@ -141,50 +97,7 @@ export default function PricingPage() {
   }
 
   const user = me?.user;
-  const now = Math.floor(Date.now() / 1000);
-  const PLAN_LEVELS: Record<string, number> = { free: 0, pro: 1, promax: 2, ultra: 3 };
-  const currentPlanActive =
-    (user?.plan === "pro" || user?.plan === "promax") &&
-    (user?.planExpiresAt ?? 0) > now &&
-    !user?.subCancelAtPeriodEnd;
-  const userLevel = currentPlanActive ? (PLAN_LEVELS[user?.plan] ?? 0) : 0;
-
-  const isHigherPlanActive = (p: "pro" | "promax" | "ultra") => userLevel > PLAN_LEVELS[p];
-
-  const secondsRemaining = (user?.planExpiresAt ?? 0) - now;
-  const isWithinSixHours = secondsRemaining <= 6 * 3600;
-
-  const activeSub = (p: string) =>
-    user?.plan === p &&
-    user?.planExpiresAt &&
-    !user?.subCancelAtPeriodEnd;
-
-  function planButtonLabel(p: "pro" | "promax" | "ultra", price: string) {
-    if (busy === p) return "Creating subscription...";
-    if (isHigherPlanActive(p)) return "Included in Pro Max";
-    if (user?.plan === p && user?.subCancelAtPeriodEnd) return `Re-subscribe - ${price}`;
-    if (activeSub(p)) {
-      if (!isWithinSixHours) return "Active (Renews soon)";
-      return `Renew Plan - ${price}`;
-    }
-    return `Subscribe - ${price}`;
-  }
-
-  function isButtonDisabled(p: "pro" | "promax" | "ultra") {
-    if (busy !== "") return true;
-    if (isHigherPlanActive(p)) return true;
-    if (activeSub(p) && !isWithinSixHours) return true;
-    return false;
-  }
-
-  const userPlanLabel =
-    user?.plan === "ultra"
-      ? "Ultra"
-      : user?.plan === "promax"
-      ? "Pro Max"
-      : user?.plan === "pro"
-      ? "Pro"
-      : "Free";
+  const userPlanLabel = user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial";
 
   return (
     <div className="app-shell container">
@@ -195,11 +108,11 @@ export default function PricingPage() {
             position: "fixed",
             top: 20,
             right: 20,
-            background: "#1f293d",
-            color: "#65d98f",
+            background: "#232427",
+            color: "#3dbb72",
             padding: "12px 20px",
             borderRadius: "8px",
-            border: "1px solid #65d98f",
+            border: "1px solid #3dbb72",
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
             zIndex: 9999,
             fontWeight: 600,
@@ -216,7 +129,7 @@ export default function PricingPage() {
             <div className="mark">KS</div>
             <div className="brand-copy">
               <div className="brand-title">Kris&apos;s Script</div>
-              <div className="brand-meta">Billing control</div>
+              <div className="brand-meta">Pay-As-You-Go Billing</div>
             </div>
           </div>
         </div>
@@ -234,7 +147,7 @@ export default function PricingPage() {
             <span className="recent-title">🎁 3 Free Trial Messages</span>
           </div>
           <div className="recent-item">
-            <span className="recent-title">💳 Metered Vault Usage ($0.10/msg)</span>
+            <span className="recent-title">⚡ SubScript Pay-As-You-Go ($0.10/msg)</span>
           </div>
         </div>
 
@@ -243,7 +156,7 @@ export default function PricingPage() {
             <div className="avatar">{user?.email ? user.email.charAt(0).toUpperCase() : "K"}</div>
             <div className="profile-details">
               <span className="profile-name">{user?.email ? user.email.split("@")[0] : "Kristien"}</span>
-              <span className="badge pro">{user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial"}</span>
+              <span className="badge pro">{userPlanLabel}</span>
             </div>
           </div>
         </div>
@@ -270,7 +183,7 @@ export default function PricingPage() {
               {isSyncing ? "Syncing..." : "🔄 Refresh Status"}
             </button>
             {me?.devMode && <span className="badge dev">DEV MODE</span>}
-            {user && <span className="badge pro">{user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial"}</span>}
+            {user && <span className="badge pro">{userPlanLabel}</span>}
           </div>
         </header>
 
@@ -289,7 +202,7 @@ export default function PricingPage() {
           {user && (
             <div className="notice-box user-status-banner">
               <div className="status-banner-left">
-                <span>Current Status: <strong>{user?.paygEnabled ? "Pay-As-You-Chat Active" : "Free Trial"}</strong></span>
+                <span>Current Status: <strong>{userPlanLabel}</strong></span>
                 <span> · Trial Used: <strong>{user.freeUsed ?? 0} / 3 free messages</strong></span>
                 {user.paygEnabled && (
                   <span> · Accrued Usage: <strong>${user.paygAccrued} USDC</strong></span>
@@ -330,10 +243,10 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* HORIZONTAL PLANS SCROLL / GRID CONTAINER */}
+          {/* PLANS GRID */}
           <div className="plans-horizontal-wrap">
             <div className="plans plans-horizontal">
-              {/* FREE CARD */}
+              {/* FREE TRIAL CARD */}
               <div className="plan-card ui-card">
                 <div className="plan-card-header">
                   <h3>Free Trial</h3>
@@ -351,75 +264,6 @@ export default function PricingPage() {
                 </button>
               </div>
 
-              {/* PRO CARD */}
-              <div className={`plan-card ${activeSub("pro") ? "active-plan-card" : ""}`}>
-                <div className="plan-card-header">
-                  <h3>Pro</h3>
-                  <div className="price">
-                    $2 <small>/ month</small>
-                  </div>
-                </div>
-                <ul className="plan-features">
-                  <li>20 messages per month</li>
-                  <li>Priority model access</li>
-                  <li>Email support</li>
-                </ul>
-                <button
-                  className="btn"
-                  onClick={() => subscribe("pro")}
-                  disabled={isButtonDisabled("pro")}
-                >
-                  {planButtonLabel("pro", "$2/mo")}
-                </button>
-              </div>
-
-              {/* PRO MAX CARD */}
-              <div className={`plan-card ${activeSub("promax") ? "active-plan-card" : ""}`}>
-                <div className="plan-card-header">
-                  <h3>Pro Max</h3>
-                  <div className="price">
-                    $5 <small>/ month</small>
-                  </div>
-                </div>
-                <ul className="plan-features">
-                  <li>50 messages per month</li>
-                  <li>Faster responses</li>
-                  <li>Priority support</li>
-                </ul>
-                <button
-                  className="btn"
-                  onClick={() => subscribe("promax")}
-                  disabled={isButtonDisabled("promax")}
-                >
-                  {planButtonLabel("promax", "$5/mo")}
-                </button>
-              </div>
-
-              {/* ULTRA CARD */}
-              <div className={`plan-card featured ${activeSub("ultra") ? "active-plan-card" : ""}`}>
-                <div className="plan-card-header">
-                  <div className="card-title-row">
-                    <h3>Ultra</h3>
-                    <span className="badge pro">Best Value</span>
-                  </div>
-                  <div className="price">
-                    $20 <small>/ month</small>
-                  </div>
-                </div>
-                <ul className="plan-features">
-                  <li>200 messages per month</li>
-                  <li>Highest throughput & priority</li>
-                  <li>Dedicated support</li>
-                </ul>
-                <button
-                  className="btn"
-                  onClick={() => subscribe("ultra")}
-                  disabled={isButtonDisabled("ultra")}
-                >
-                  {planButtonLabel("ultra", "$20/mo")}
-                </button>
-              </div>
-
               {/* PAYG CARD */}
               <div className="plan-card payg-card featured ui-card">
                 <div className="plan-card-header">
@@ -433,7 +277,7 @@ export default function PricingPage() {
                 </div>
                 
                 <div className="payg-setup-box">
-                  <strong className="setup-title">⚡ First-Time SubScript PAYG Setup:</strong>
+                  <strong className="setup-title">⚡ SubScript Metered Vault Setup:</strong>
                   <ol className="setup-steps">
                     <li>
                       Go to <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer">SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
@@ -467,7 +311,7 @@ export default function PricingPage() {
                   {user?.paygEnabled ? (
                     <div className="payg-action-wrap">
                       <p className="payg-status">
-                        Status: <strong style={{ color: "#65d98f" }}>Active Metered Billing</strong> · Accrued: <strong>${user.paygAccrued}</strong>
+                        Status: <strong style={{ color: "#3dbb72" }}>Active Metered Billing</strong> · Accrued: <strong>${user.paygAccrued}</strong>
                       </p>
                       <button
                         className="btn secondary small"
@@ -493,7 +337,7 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* IN-APP TRANSACTION & RECEIPT HISTORY TABLE */}
+          {/* IN-APP TRANSACTION HISTORY TABLE */}
           {transactions.length > 0 && (
             <div className="notice-box" style={{ marginTop: 24, flexDirection: "column", alignItems: "stretch" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -550,13 +394,13 @@ export default function PricingPage() {
             </div>
           )}
 
-          {/* SUBSCRIPT USER DM LINK */}
+          {/* SUBSCRIPT USER DASHBOARD LINK */}
           <div className="notice-box dm-notice-box" style={{ marginTop: 24 }}>
             <div className="dm-notice-content">
               <div>
                 <strong style={{ fontSize: "1rem" }}>SubScript User Dashboard & DM</strong>
                 <p className="muted" style={{ marginTop: 2 }}>
-                  Manage subscriptions, view transaction receipts, or adjust commits on SubScript.
+                  Manage metered commits, view transaction receipts, or adjust vault limits on SubScript.
                 </p>
               </div>
               <a

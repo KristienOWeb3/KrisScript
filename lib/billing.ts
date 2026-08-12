@@ -1,5 +1,4 @@
 import { q, one } from "./db";
-import type { User } from "./auth";
 
 export type Payment = {
   id: string;
@@ -25,7 +24,8 @@ export async function fulfillPayment(
     payment = await one<Payment>("SELECT * FROM payments WHERE intent_id = $1", [intentId]);
   }
   if (!payment && merchantReference) {
-    const paymentId = merchantReference.split(":")[2];
+    const parts = merchantReference.split(":");
+    const paymentId = parts[2] || parts[0];
     if (paymentId) {
       payment = await one<Payment>("SELECT * FROM payments WHERE id = $1", [paymentId]);
     }
@@ -44,6 +44,16 @@ export async function fulfillPayment(
   if (claim.rowCount === 0) return { ok: true, already: true };
 
   await q("UPDATE users SET activated = 1 WHERE id = $1", [payment.user_id]);
+
+  // If this was a plan payment, activate the plan for 30 days
+  if (payment.product === "pro" || payment.product === "promax" || payment.product === "ultra") {
+    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 86400;
+    await q(
+      "UPDATE users SET plan = $1, plan_expires_at = $2, sub_status = 'active', sub_cancel_at_period_end = 0 WHERE id = $3",
+      [payment.product, expiresAt, payment.user_id]
+    );
+  }
+
   return { ok: true };
 }
 
@@ -51,6 +61,55 @@ export async function handleSubscriptionEvent(
   type: string,
   data: any
 ): Promise<{ ok: boolean; reason?: string }> {
+  const subId = data.subscription_id || data.id;
+  const extRef = data.external_reference || data.externalReference || "";
+  let userId: number | undefined;
+  let planName = "pro";
+
+  if (extRef) {
+    // Expected format: user:{userId}:plan:{product} or {product}:{userId}:{paymentId}
+    const match = extRef.match(/user:(\d+):plan:(pro|promax|ultra)/) || extRef.match(/(pro|promax|ultra):(\d+)/);
+    if (match) {
+      if (extRef.startsWith("user:")) {
+        userId = parseInt(match[1], 10);
+        planName = match[2];
+      } else {
+        planName = match[1];
+        userId = parseInt(match[2], 10);
+      }
+    }
+  }
+
+  if (!userId && subId) {
+    const payment = await one<Payment>("SELECT * FROM payments WHERE intent_id = $1", [subId]);
+    if (payment) {
+      userId = payment.user_id;
+      planName = payment.product;
+    }
+  }
+
+  if (!userId) return { ok: false, reason: "user_not_found" };
+
+  const now = Math.floor(Date.now() / 1000);
+  const thirtyDays = 30 * 86400;
+
+  if (type === "subscription.created" || type === "subscription.renewed" || type === "subscription.active") {
+    await q(
+      `UPDATE users SET 
+         plan = $1, 
+         plan_expires_at = $2, 
+         subscription_id = $3, 
+         sub_status = 'active', 
+         sub_cancel_at_period_end = 0 
+       WHERE id = $4`,
+      [planName, now + thirtyDays, subId, userId]
+    );
+  } else if (type === "subscription.canceled" || type === "subscription.deleted") {
+    await q(
+      "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
+      [userId]
+    );
+  }
+
   return { ok: true };
 }
-

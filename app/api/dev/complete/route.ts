@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   );
   if (!payment) return Response.json({ error: "Unknown intent." }, { status: 404 });
 
-  const isSubscription = payment.product === "pro" || payment.product === "promax";
+  const isSubscription = payment.product === "pro" || payment.product === "promax" || payment.product === "ultra";
   const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
   
   const targetType =
