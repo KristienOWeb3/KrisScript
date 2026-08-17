@@ -11,6 +11,29 @@ export function webhookSecret(): string {
   return process.env.SUBSCRIPT_WEBHOOK_SECRET || DEV_WEBHOOK_SECRET;
 }
 
+/**
+ * Whether a real webhook secret is configured. DEV_WEBHOOK_SECRET is a literal
+ * in a public repo, so falling back to it in production turns a missing env var
+ * into an endless stream of "invalid signature" 401s that look like an attack
+ * rather than the misconfiguration they are. Callers use this to say so.
+ */
+export function hasWebhookSecret(): boolean {
+  return !!process.env.SUBSCRIPT_WEBHOOK_SECRET;
+}
+
+/**
+ * How far a signature timestamp may be from now.
+ *
+ * Deliberately generous. Providers retry failed deliveries by re-POSTing the
+ * payload they already signed, so a tight window makes every retry after that
+ * cutoff permanently unverifiable — a queue that has been stuck for an hour can
+ * never drain, no matter how often it is reclaimed. Replay damage is already
+ * prevented by the UNIQUE event id and atomic claim in the webhook route, which
+ * turn a repeat into a no-op, so this bound is defence in depth rather than the
+ * primary control.
+ */
+export const SIGNATURE_TOLERANCE_SECONDS = 24 * 60 * 60;
+
 export function appUrl(): string {
   const url =
     process.env.APP_URL ||
@@ -315,7 +338,7 @@ export function verifyWebhookSignature(rawBody: string, header: string | null): 
   if (!match) return false;
   const [, timestamp, digest] = match;
   const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - Number(timestamp)) > 300) return false;
+  if (Math.abs(now - Number(timestamp)) > SIGNATURE_TOLERANCE_SECONDS) return false;
   const expected = crypto
     .createHmac("sha256", webhookSecret())
     .update(`${timestamp}.${rawBody}`)

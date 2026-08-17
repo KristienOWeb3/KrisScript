@@ -1,5 +1,5 @@
 import { q } from "@/lib/db";
-import { verifyWebhookSignature } from "@/lib/subscript";
+import { verifyWebhookSignature, hasWebhookSecret } from "@/lib/subscript";
 import { fulfillPayment, handleSubscriptionEvent } from "@/lib/billing";
 
 /**
@@ -10,6 +10,19 @@ import { fulfillPayment, handleSubscriptionEvent } from "@/lib/billing";
 export async function POST(req: Request) {
   const rawBody = await req.text();
   const signature = req.headers.get("x-subscript-signature");
+
+  /* Distinguish "not configured" from "bad signature". Without this, a missing
+     SUBSCRIPT_WEBHOOK_SECRET silently verifies against a literal published in
+     this repo, so every genuine delivery 401s and the logs blame the sender. */
+  if (!hasWebhookSecret()) {
+    console.error(
+      "[webhook] SUBSCRIPT_WEBHOOK_SECRET is not set — cannot verify deliveries."
+    );
+    return Response.json(
+      { error: "Webhook secret is not configured on this deployment." },
+      { status: 500 }
+    );
+  }
 
   if (!verifyWebhookSignature(rawBody, signature)) {
     return Response.json({ error: "Invalid or expired signature" }, { status: 401 });

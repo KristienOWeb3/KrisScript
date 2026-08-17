@@ -26,11 +26,30 @@ export async function POST(req: Request) {
     intentId?: string;
     eventType?: string;
   };
-  const payment = await one<Payment>(
-    "SELECT * FROM payments WHERE intent_id = $1 AND user_id = $2",
-    [intentId, user.id]
-  );
-  if (!payment) return Response.json({ error: "Unknown intent." }, { status: 404 });
+
+  /* With no intentId, fall back to this user's newest unpaid payment. Locally
+     SubScript cannot reach the app, so every checkout parks as PENDING and the
+     common case is "finish the one I just started" — digging the intent id out
+     of the checkout URL first is friction with no purpose. */
+  const payment = intentId
+    ? await one<Payment>(
+        "SELECT * FROM payments WHERE intent_id = $1 AND user_id = $2",
+        [intentId, user.id]
+      )
+    : await one<Payment>(
+        "SELECT * FROM payments WHERE user_id = $1 AND status <> 'PAID' ORDER BY created_at DESC LIMIT 1",
+        [user.id]
+      );
+  if (!payment) {
+    return Response.json(
+      {
+        error: intentId
+          ? "Unknown intent."
+          : "No pending payment found for this account.",
+      },
+      { status: 404 }
+    );
+  }
 
   const isSubscription = payment.product === "pro" || payment.product === "promax" || payment.product === "ultra";
   const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
