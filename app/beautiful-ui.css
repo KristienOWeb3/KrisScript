@@ -1172,3 +1172,59 @@ svg {
     min-width: 0;
   }
 }
+
+/* ----------------------------------------------------
+   SKELETON — placeholder shown while /api/me is in flight
+   Sized to match the real profile-bar contents so the row
+   doesn't shift height when the data lands.
+---------------------------------------------------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  background: var(--hover);
+  border-radius: 6px;
+  flex: none;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.07),
+    transparent
+  );
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* Matches .avatar: 36px circle. */
+.skeleton-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+/* Matches .profile-name line height; .sm matches the smaller .badge row. */
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-line.sm {
+  height: 10px;
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}

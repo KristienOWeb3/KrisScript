@@ -195,13 +195,18 @@ export default function ChatPage() {
   }
 
   const user = me?.user;
+  /* /api/me hasn't answered yet. Everything derived from `user` is unknown
+     until it does, so the UI shows skeletons rather than guessing — the old
+     fallbacks rendered "Kristien" and "Free Trial (3 left)" to every account
+     for a beat before snapping to the real values. */
+  const loading = !me;
   const isPayg = !!user?.paygEnabled;
-  const freeRemaining = Math.max(0, (user?.freeCap ?? 3) - (user?.freeUsed ?? 0));
+  const freeRemaining = Math.max(0, (user?.freeCap ?? 0) - (user?.freeUsed ?? 0));
   const planLabel = isPayg
     ? "Pay-As-You-Chat ($0.10/msg)"
     : `Free Trial (${freeRemaining} left)`;
   const badgeClass = isPayg ? "pro" : "free";
-  const userName = user?.displayName || (user?.email ? user.email.split("@")[0] : "Kristien");
+  const userName = user?.displayName || user?.email?.split("@")[0] || "";
   const userInitials = userName.charAt(0).toUpperCase();
   const pendingName: string | null = user?.pendingDisplayName ?? null;
   const nameChangePrice = me?.nameChangePriceUsdc ?? "1.00";
@@ -307,16 +312,31 @@ export default function ChatPage() {
         </div>
 
         {/* BOTTOM USER PROFILE BAR */}
-        <div className="rail-bottom profile-bar" onClick={() => setProfileModalOpen(true)}>
-          <div className="profile-info">
-            <div className="avatar">{userInitials}</div>
-            <div className="profile-details">
-              <span className="profile-name">{userName}</span>
-              <span className={`badge ${badgeClass}`}>{planLabel}</span>
+        <div
+          className="rail-bottom profile-bar"
+          onClick={loading ? undefined : () => setProfileModalOpen(true)}
+          aria-busy={loading || undefined}
+        >
+          {loading ? (
+            <div className="profile-info">
+              <div className="skeleton skeleton-avatar" />
+              <div className="profile-details">
+                <span className="skeleton skeleton-line" style={{ width: 84 }} />
+                <span className="skeleton skeleton-line sm" style={{ width: 118 }} />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="profile-info">
+              <div className="avatar">{userInitials}</div>
+              <div className="profile-details">
+                <span className="profile-name">{userName}</span>
+                <span className={`badge ${badgeClass}`}>{planLabel}</span>
+              </div>
+            </div>
+          )}
           <button
             className="icon-btn settings-gear"
+            disabled={loading}
             onClick={(e) => {
               e.stopPropagation();
               setProfileModalOpen(true);
@@ -443,7 +463,7 @@ export default function ChatPage() {
                 <strong style={{ display: "block", marginBottom: 6 }}>Free Trial Progress</strong>
                 <div className="muted" style={{ fontSize: "0.84rem" }}>
                   <Icon name="message" size={14} /> {freeRemaining} of{" "}
-                  {user?.freeCap ?? 3} free trial messages remaining
+                  {user?.freeCap ?? 0} free trial messages remaining
                 </div>
               </div>
 
@@ -504,7 +524,7 @@ export default function ChatPage() {
                     onChange={(v) => setInput(v)}
                     onSubmit={(composed) => sendText(composed)}
                     disabled={!!busy}
-                    planLabel={planLabel}
+                    planLabel={loading ? undefined : planLabel}
                     onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
                   />
 
@@ -645,7 +665,7 @@ export default function ChatPage() {
                 onChange={(v) => setInput(v)}
                 onSubmit={(composed) => sendText(composed)}
                 disabled={!!busy}
-                planLabel={planLabel}
+                planLabel={loading ? undefined : planLabel}
                 onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
               />
 

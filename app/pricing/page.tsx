@@ -98,7 +98,11 @@ export default function PricingPage() {
   }
 
   const user = me?.user;
+  /* Same rule as /chat: nothing derived from `user` is rendered until
+     /api/me answers, so no account briefly sees another's placeholder. */
+  const loading = !me;
   const userPlanLabel = user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial";
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "";
 
   return (
     <div className="app-shell">
@@ -156,14 +160,24 @@ export default function PricingPage() {
           </div>
         </div>
 
-        <div className="rail-bottom profile-bar">
-          <div className="profile-info">
-            <div className="avatar">{user?.email ? user.email.charAt(0).toUpperCase() : "K"}</div>
-            <div className="profile-details">
-              <span className="profile-name">{user?.email ? user.email.split("@")[0] : "Kristien"}</span>
-              <span className="badge pro">{userPlanLabel}</span>
+        <div className="rail-bottom profile-bar" aria-busy={loading || undefined}>
+          {loading ? (
+            <div className="profile-info">
+              <div className="skeleton skeleton-avatar" />
+              <div className="profile-details">
+                <span className="skeleton skeleton-line" style={{ width: 84 }} />
+                <span className="skeleton skeleton-line sm" style={{ width: 104 }} />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="profile-info">
+              <div className="avatar">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="profile-details">
+                <span className="profile-name">{displayName}</span>
+                <span className="badge pro">{userPlanLabel}</span>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -215,7 +229,7 @@ export default function PricingPage() {
             <div className="notice-box user-status-banner">
               <div className="status-banner-left">
                 <span>Current Status: <strong>{userPlanLabel}</strong></span>
-                <span> · Trial Used: <strong>{user.freeUsed ?? 0} / 3 free messages</strong></span>
+                <span> · Trial Used: <strong>{user.freeUsed ?? 0} / {user.freeCap ?? 0} free messages</strong></span>
                 {user.paygEnabled && (
                   <span> · Accrued Usage: <strong>${user.paygAccrued} USDC</strong></span>
                 )}

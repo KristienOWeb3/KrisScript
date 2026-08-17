@@ -1,7 +1,7 @@
 import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { hasRealKey } from "@/lib/subscript";
-import { FREE_MESSAGE_CAP, NAME_CHANGE_PRICE_USDC } from "@/lib/plans";
+import { FREE_MESSAGE_CAP, NAME_CHANGE_PRICE_USDC, formatUsdc } from "@/lib/plans";
 import { resolveDisplayName } from "@/lib/displayName";
 
 export async function GET() {
@@ -22,7 +22,8 @@ export async function GET() {
       freeCap: FREE_MESSAGE_CAP,
       paygEnabled: !!user.payg_enabled,
       walletAddress: user.wallet_address,
-      paygAccrued: user.payg_accrued,
+      // Normalised here so every screen renders the same balance identically.
+      paygAccrued: formatUsdc(user.payg_accrued),
       displayName: resolveDisplayName(user.display_name, user.email),
       hasCustomName: !!user.display_name,
       pendingDisplayName: user.pending_display_name,

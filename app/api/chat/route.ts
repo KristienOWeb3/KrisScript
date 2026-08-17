@@ -8,6 +8,8 @@ import {
   PAYG_PRICE_USDC,
   PAYG_PRICE_USDC_MICROS,
   DEV_VAULT_COMMIT_USDC,
+  usdcToMicros,
+  microsToUsdc,
 } from "@/lib/plans";
 
 export async function GET(req: Request) {
@@ -79,17 +81,20 @@ export async function POST(req: Request) {
     billed = "free";
   } else if (user.payg_enabled && user.wallet_address) {
     if (!hasRealKey()) {
-      const accrued = parseFloat(user.payg_accrued || "0") + parseFloat(PAYG_PRICE_USDC);
-      if (accrued > DEV_VAULT_COMMIT_USDC) {
+      const priceMicros = BigInt(PAYG_PRICE_USDC_MICROS);
+      const alreadyMicros = usdcToMicros(user.payg_accrued);
+      const accruedMicros = alreadyMicros + priceMicros;
+      if (accruedMicros > usdcToMicros(DEV_VAULT_COMMIT_USDC)) {
         return Response.json(
           {
-            error: `Simulated vault exhausted (accrued $${(accrued - 0.1).toFixed(2)} of $${DEV_VAULT_COMMIT_USDC.toFixed(2)} commit). Re-fund your vault to continue.`,
+            // Report what is actually on the clock, not the rejected total.
+            error: `Simulated vault exhausted (accrued $${microsToUsdc(alreadyMicros)} of $${microsToUsdc(usdcToMicros(DEV_VAULT_COMMIT_USDC))} commit). Re-fund your vault to continue.`,
             reason: "vault",
           },
           { status: 402 }
         );
       }
-      nextDevPaygAccrued = accrued.toFixed(2);
+      nextDevPaygAccrued = microsToUsdc(accruedMicros);
     }
     billed = "payg";
   } else {
@@ -149,10 +154,16 @@ export async function POST(req: Request) {
           { status: 502 }
         );
       }
-      await q("UPDATE users SET payg_accrued = $1 WHERE id = $2", [
-        String(usage.body?.accruedUsageUsdc ?? user.payg_accrued),
-        user.id,
-      ]);
+      /* SubScript's running total is authoritative when it sends one. When it
+         doesn't, the charge still succeeded (status 200), so add the price
+         locally — the previous code fell back to the OLD balance, which left
+         the user billed while the figure on screen never moved. */
+      const reported = usage.body?.accruedUsageUsdc;
+      const nextAccrued =
+        reported != null && Number.isFinite(Number(reported))
+          ? microsToUsdc(usdcToMicros(reported))
+          : microsToUsdc(usdcToMicros(user.payg_accrued) + BigInt(PAYG_PRICE_USDC_MICROS));
+      await q("UPDATE users SET payg_accrued = $1 WHERE id = $2", [nextAccrued, user.id]);
     }
   }
 

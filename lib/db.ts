@@ -96,7 +96,11 @@ async function init(): Promise<Backend> {
   // No DATABASE_URL outside Vercel: embedded Postgres (PGlite), zero setup.
   // Persists to data/pglite locally.
   const { PGlite } = await import("@electric-sql/pglite");
+  const { mkdirSync } = await import("fs");
   const dir = path.join(process.cwd(), "data", "pglite");
+  // PGlite mkdirs its own directory but not the parent, so a checkout without
+  // a data/ folder (it is gitignored, so every fresh clone) fails with ENOENT.
+  mkdirSync(dir, { recursive: true });
   const db = new PGlite(dir);
   await db.exec(SCHEMA);
   return {
@@ -113,7 +117,16 @@ async function init(): Promise<Backend> {
 // Cache the backend promise across dev hot reloads and warm invocations.
 const g = globalThis as unknown as { __krisDb?: Promise<Backend> };
 function backend(): Promise<Backend> {
-  if (!g.__krisDb) g.__krisDb = init();
+  if (!g.__krisDb) {
+    // Drop the cache if init rejects. Caching a rejected promise permanently
+    // poisons the process: a transient Postgres failure at cold start would
+    // make every later query on that instance fail with the original error,
+    // long after the cause was gone.
+    g.__krisDb = init().catch((err) => {
+      g.__krisDb = undefined;
+      throw err;
+    });
+  }
   return g.__krisDb;
 }
 
