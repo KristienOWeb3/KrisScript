@@ -1,7 +1,8 @@
 import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { hasRealKey } from "@/lib/subscript";
-import { FREE_MESSAGE_CAP } from "@/lib/plans";
+import { FREE_MESSAGE_CAP, NAME_CHANGE_PRICE_USDC } from "@/lib/plans";
+import { resolveDisplayName } from "@/lib/displayName";
 
 export async function GET() {
   const user = await currentUser();
@@ -22,7 +23,11 @@ export async function GET() {
       paygEnabled: !!user.payg_enabled,
       walletAddress: user.wallet_address,
       paygAccrued: user.payg_accrued,
+      displayName: resolveDisplayName(user.display_name, user.email),
+      hasCustomName: !!user.display_name,
+      pendingDisplayName: user.pending_display_name,
     },
+    nameChangePriceUsdc: NAME_CHANGE_PRICE_USDC,
     devMode: !hasRealKey(),
   });
 }

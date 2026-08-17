@@ -43,7 +43,10 @@ export async function POST(req: Request) {
   }
 
   const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
-  if (payment.product === "signup") {
+  // One-time purchases fulfill directly; only plan products go down the
+  // subscription path.
+  const ONE_TIME = new Set(["signup", "name_change"]);
+  if (ONE_TIME.has(payment.product)) {
     await fulfillPayment(payment.intent_id ?? searchId, externalReference);
   } else {
     const subscriptionId = payment.intent_id ?? (searchId ? `sub_${searchId}` : `sub_return_${payment.id}`);

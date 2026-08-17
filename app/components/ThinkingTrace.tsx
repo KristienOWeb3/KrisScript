@@ -1,5 +1,7 @@
 "use client";
 
+import Icon from "./Icon";
+
 import { useState } from "react";
 
 export type Step = {
@@ -36,13 +38,17 @@ export default function ThinkingTrace({
         type="button"
       >
         <div className="thinking-header-left">
-          <span className="sparkle-icon">✨</span>
+          <span className="sparkle-icon">
+            <Icon name="sparkle" size={14} />
+          </span>
           <span className="thinking-title">Thought process</span>
           <span className="thinking-badge">{traceSteps.length} steps</span>
         </div>
         <div className="thinking-header-right">
           {duration && <span className="thinking-duration">{duration}</span>}
-          <span className={`chevron-icon ${expanded ? "open" : ""}`}>▼</span>
+          <span className={`chevron-icon ${expanded ? "open" : ""}`}>
+            <Icon name="chevron-down" size={14} />
+          </span>
         </div>
       </button>
 
@@ -51,9 +57,17 @@ export default function ThinkingTrace({
           {traceSteps.map((s, idx) => (
             <div key={s.id || idx} className={`thinking-step-row ${s.status}`}>
               <div className="step-indicator">
-                {s.status === "completed" && <span className="step-check">✓</span>}
+                {s.status === "completed" && (
+                  <span className="step-check">
+                    <Icon name="check" size={13} />
+                  </span>
+                )}
                 {s.status === "running" && <span className="step-spinner" />}
-                {s.status === "failed" && <span className="step-cross">✕</span>}
+                {s.status === "failed" && (
+                  <span className="step-cross">
+                    <Icon name="x" size={13} />
+                  </span>
+                )}
               </div>
               <div className="step-content">
                 <span className="step-label">{s.label}</span>

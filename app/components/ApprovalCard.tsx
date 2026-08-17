@@ -1,5 +1,7 @@
 "use client";
 
+import Icon from "./Icon";
+
 import { useState } from "react";
 
 export type ApprovalRequest = {
@@ -58,7 +60,10 @@ export default function ApprovalCard({
         </div>
       ) : (
         <div className={`approval-result-badge ${status}`}>
-          {status === "approved" ? "✓ Action Approved & Executed" : "✕ Action Declined"}
+          <Icon name={status === "approved" ? "check" : "x"} size={14} />
+          <span>
+            {status === "approved" ? "Action approved & executed" : "Action declined"}
+          </span>
         </div>
       )}
     </div>

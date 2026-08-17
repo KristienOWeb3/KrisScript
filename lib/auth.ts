@@ -18,6 +18,8 @@ export type User = {
   subscription_id: string | null;
   sub_status: string | null;
   sub_cancel_at_period_end: number;
+  display_name: string | null;
+  pending_display_name: string | null;
   created_at: number;
 };
 

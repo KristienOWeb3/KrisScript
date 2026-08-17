@@ -41,8 +41,9 @@
   --glass: rgba(35, 36, 39, 0.7);
   --shadow: 0 0 0 1px var(--line), 0 2px 10px rgba(0, 0, 0, 0.35);
   --radius: 10px;
-  --font-heading: Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-body: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-heading: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-body: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 html, body {
@@ -348,7 +349,7 @@ html, body {
   padding: 4px 8px;
   background: var(--canvas);
   border-radius: 6px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.82rem;
   color: var(--accent);
 }
@@ -522,7 +523,7 @@ html, body {
 
 .code-content {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.86rem;
   line-height: 1.6;
 }
@@ -734,4 +735,441 @@ html, body {
   background: var(--hover);
   border-color: var(--line-strong);
   color: var(--ink);
+}
+
+/* ----------------------------------------------------
+   LOADING STATE — pixel-grid loader (Drive / Dots / Orbit)
+   Per-cell delays are set inline by LoadingState.tsx, so
+   the keyframes below must stay globally named.
+---------------------------------------------------- */
+.loading-state {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 10px;
+}
+
+.loading-state-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  gap: 1.5px;
+}
+
+.loading-state-cell {
+  width: 4px;
+  height: 4px;
+  background: var(--ink);
+  border-radius: 1px;
+}
+
+.loading-state-cell.round {
+  border-radius: 50%;
+}
+
+@keyframes pixel-on {
+  0% { opacity: 0.15; }
+  18% { opacity: 1; }
+  55% { opacity: 0.15; }
+  100% { opacity: 0.15; }
+}
+
+.loading-state-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--ink-3) 35%,
+    var(--ink) 50%,
+    var(--ink-3) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer-text 1.4s linear infinite;
+}
+
+@keyframes shimmer-text {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+.loading-state-elapsed {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced motion freezes the grid to its dim state and stops
+   the label sweep; the elapsed timer keeps ticking. */
+@media (prefers-reduced-motion: reduce) {
+  .loading-state-cell {
+    animation: none !important;
+  }
+  .loading-state-label {
+    animation: none !important;
+    background: none;
+    color: var(--ink-2);
+    -webkit-background-clip: initial;
+    background-clip: initial;
+  }
+}
+
+/* ----------------------------------------------------
+   STREAMING TEXT — typewriter reveal with trailing caret
+---------------------------------------------------- */
+.streaming-prose {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.streaming-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* ----------------------------------------------------
+   COMPOSER — attach / skills menu + attachment chips
+---------------------------------------------------- */
+.plus-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.plus-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  line-height: 1;
+}
+
+.plus-glyph {
+  font-size: 1.15rem;
+  font-weight: 400;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.plus-btn[data-open] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.plus-btn[data-open] .plus-glyph {
+  transform: rotate(45deg);
+}
+
+.composer-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  min-width: 208px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 6px;
+  /* --shadow-raised is referenced elsewhere in this file but never defined,
+     so carry an explicit fallback until it lands in the token block. */
+  box-shadow: var(--shadow-raised, 0 8px 28px rgba(0, 0, 0, 0.45));
+  z-index: 220;
+  animation: popUp 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.composer-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.13s ease;
+}
+
+.composer-menu-item:hover:not(.static) {
+  background: var(--hover);
+}
+
+.composer-menu-item.static {
+  cursor: default;
+  color: var(--ink-2);
+}
+
+.menu-icon {
+  font-size: 0.9rem;
+  width: 16px;
+  text-align: center;
+  flex: none;
+}
+
+.menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-chevron,
+.menu-check {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  flex: none;
+}
+
+.menu-check {
+  color: var(--accent);
+}
+
+.composer-menu-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 5px 4px;
+}
+
+.composer-menu-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ink-3);
+  padding: 4px 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.composer-menu-sub {
+  position: relative;
+}
+
+.composer-menu-flyout {
+  position: absolute;
+  left: calc(100% + 6px);
+  bottom: -6px;
+  min-width: 170px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: var(--shadow-raised, 0 8px 28px rgba(0, 0, 0, 0.45));
+  z-index: 221;
+  animation: popUp 0.13s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.composer-menu-flyout .menu-name {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+
+.composer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.composer-field .pill-input {
+  flex: none;
+  width: 100%;
+}
+
+/* Chips break the pill into a rounded rect so the row has somewhere to sit. */
+.pill-prompt:has(.composer-chips) {
+  border-radius: 20px;
+  align-items: flex-end;
+  padding-top: 10px;
+}
+
+.composer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 6px 0;
+}
+
+.composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 6px 4px 8px;
+  background: var(--field);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  font-size: 0.76rem;
+  color: var(--ink-2);
+  animation: popUp 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.composer-chip[data-exit] {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.chip-icon {
+  font-size: 0.8rem;
+  flex: none;
+}
+
+.chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-remove {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+  transition: color 0.13s ease, background 0.13s ease;
+}
+
+.chip-remove:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-chip,
+  .composer-menu,
+  .composer-menu-flyout {
+    animation: none;
+  }
+}
+
+/* ----------------------------------------------------
+   ICONS — alignment for wrappers that used to hold emoji
+
+   These spans previously sized their glyph with font-size.
+   They now hold an inline SVG, so they need to be flex
+   boxes and the SVG must not be allowed to shrink.
+---------------------------------------------------- */
+svg {
+  flex: none;
+  /* Nudges icons onto the text baseline when they sit inline
+     with prose; ignored inside flex containers. */
+  vertical-align: -0.15em;
+}
+
+.btn-icon,
+.search-icon,
+.plus-glyph,
+.menu-icon,
+.menu-chevron,
+.menu-check,
+.chip-icon,
+.chip-remove,
+.send-arrow,
+.sparkle-icon,
+.chevron-icon,
+.step-check,
+.step-cross,
+.tool-chip-icon,
+.tool-chip-status,
+.payment-method-icon,
+.recommendation-tag .sparkle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.code-copy-btn,
+.approval-result-badge,
+.recommendation-btn,
+.setup-title,
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.dropdown-item.header {
+  display: block;
+}
+
+/* .icon-btn sized its glyph with font-size and had no centering. */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  line-height: 0;
+}
+
+/* Was a literal "•" text node; now an empty span, so draw the dot. */
+.embedded-plan-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+/* Running-state indicator for tool chips (replaces the "..." glyph). */
+.tool-chip-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-chip-spinner,
+  .step-spinner {
+    animation: none;
+  }
+}
+
+/* ----------------------------------------------------
+   PAID DISPLAY NAME CHANGE
+---------------------------------------------------- */
+.name-change-pending {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--inset);
+}
+
+.name-change-error {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--red);
+}
+
+/* The Skills flyout opens to the right of the + menu, which overflows the
+   viewport on phones (208px menu + 170px flyout > 375px screen). Below 640px,
+   stack it above the parent menu instead so it stays inside the menu's own
+   footprint. */
+@media (max-width: 640px) {
+  .composer-menu-flyout {
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 6px);
+    min-width: 0;
+  }
 }

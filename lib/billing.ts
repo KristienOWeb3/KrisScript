@@ -54,6 +54,19 @@ export async function fulfillPayment(
     );
   }
 
+  // Paid display-name change: promote the parked name now that $1 has cleared.
+  // Guarded on pending_display_name being non-null so a replayed webhook after
+  // a later change can't resurrect an older name.
+  if (payment.product === "name_change") {
+    await q(
+      `UPDATE users
+          SET display_name = pending_display_name,
+              pending_display_name = NULL
+        WHERE id = $1 AND pending_display_name IS NOT NULL`,
+      [payment.user_id]
+    );
+  }
+
   return { ok: true };
 }
 

@@ -17,12 +17,18 @@ CREATE TABLE IF NOT EXISTS users (
   subscription_id TEXT,
   sub_status TEXT,
   sub_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  display_name TEXT,
+  pending_display_name TEXT,
   created_at INTEGER NOT NULL DEFAULT (floor(extract(epoch from now()))::integer)
 );
 -- Additive migrations for databases created before subscriptions existed.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_id TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_status TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_cancel_at_period_end INTEGER NOT NULL DEFAULT 0;
+-- Paid display-name change: the requested name is parked in
+-- pending_display_name until the $1 USDC payment is fulfilled.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_display_name TEXT;
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL,

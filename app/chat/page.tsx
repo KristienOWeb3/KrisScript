@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LoadingOrbit } from "../components/LoadingOrbit";
+import LoadingState from "../components/LoadingState";
+import StreamingText from "../components/StreamingText";
 import PillPromptBar from "../components/PillPromptBar";
-import ThinkingTrace from "../components/ThinkingTrace";
 import CodeBlock from "../components/CodeBlock";
+import Icon from "../components/Icon";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
@@ -19,6 +20,8 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Content of the reply currently being typed out, or null. */
+  const [streamingReply, setStreamingReply] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<{ error: string; reason?: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -27,6 +30,9 @@ export default function ChatPage() {
   const [paygWalletInput, setPaygWalletInput] = useState("");
   const [paygSaving, setPaygSaving] = useState(false);
   const [copiedMerchant, setCopiedMerchant] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   function copyMerchantName() {
     navigator.clipboard.writeText("okechukwuanigba.sub");
@@ -57,6 +63,46 @@ export default function ChatPage() {
     }
   }
 
+  /** Start the $1 USDC display-name change and hand off to SubScript checkout. */
+  async function startNameChange() {
+    const requested = nameInput.trim();
+    if (!requested || nameBusy) return;
+    setNameBusy(true);
+    setNameError(null);
+    try {
+      const res = await fetch("/api/billing/name-change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: requested }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNameError(data.error || "Could not start the name change.");
+        return;
+      }
+      window.location.href = data.checkoutUrl;
+    } catch {
+      setNameError("Network error. Please try again.");
+    } finally {
+      setNameBusy(false);
+    }
+  }
+
+  /** Drop a name change that was started but never paid for. */
+  async function cancelNameChange() {
+    setNameBusy(true);
+    setNameError(null);
+    try {
+      await fetch("/api/billing/name-change", { method: "DELETE" });
+      setNameInput("");
+      await loadMe();
+    } catch {
+      setNameError("Network error. Please try again.");
+    } finally {
+      setNameBusy(false);
+    }
+  }
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   async function loadMe() {
@@ -84,16 +130,25 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, blocked]);
 
+  // Keep the view pinned to the bottom while a reply types itself out.
+  useEffect(() => {
+    if (!streamingReply) return;
+    const t = setInterval(() => bottomRef.current?.scrollIntoView({ block: "end" }), 120);
+    return () => clearInterval(t);
+  }, [streamingReply]);
+
   function startNewChat() {
     setActiveThreadId(`thread_${Math.random().toString(36).substring(2, 10)}`);
     setMessages([]);
     setBlocked(null);
+    setStreamingReply(null);
     setSidebarOpen(false);
   }
 
   function selectThread(tId: string) {
     setActiveThreadId(tId);
     loadThread(tId);
+    setStreamingReply(null);
     setSidebarOpen(false);
   }
 
@@ -102,6 +157,7 @@ export default function ChatPage() {
     if (!text || busy) return;
     setBusy(true);
     setBlocked(null);
+    setStreamingReply(null);
     setInput("");
     setMessages((m) => [...m, { role: "user", content: text }]);
 
@@ -122,6 +178,10 @@ export default function ChatPage() {
         copy[copy.length - 1] = { ...copy[copy.length - 1], billed: data.billed };
         return [...copy, { role: "assistant", content: data.reply }];
       });
+      // Replies containing a fenced code block render instantly — typing a code
+      // block out character by character just looks like a stutter.
+      const hasCode = /```[\s\S]*?```/.test(data.reply ?? "");
+      setStreamingReply(hasCode ? null : data.reply);
       loadThread(data.threadId || activeThreadId);
     }
     setBusy(false);
@@ -140,14 +200,16 @@ export default function ChatPage() {
     ? "Pay-As-You-Chat ($0.10/msg)"
     : `Free Trial (${freeRemaining} left)`;
   const badgeClass = isPayg ? "pro" : "free";
-  const userInitials = user?.email ? user.email.charAt(0).toUpperCase() : "K";
-  const userName = user?.email ? user.email.split("@")[0] : "Kristien";
+  const userName = user?.displayName || (user?.email ? user.email.split("@")[0] : "Kristien");
+  const userInitials = userName.charAt(0).toUpperCase();
+  const pendingName: string | null = user?.pendingDisplayName ?? null;
+  const nameChangePrice = me?.nameChangePriceUsdc ?? "1.00";
 
   const filteredRecents = recents.filter((r) =>
     r.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  function renderMessageContent(content: string) {
+  function renderMessageContent(content: string, stream = false) {
     const codeMatch = content.match(/```(\w+)?\n([\s\S]*?)```/);
     if (codeMatch) {
       const lang = codeMatch[1] || "javascript";
@@ -160,6 +222,9 @@ export default function ChatPage() {
           {parts[1] && <div style={{ marginTop: 8 }}>{parts[1]}</div>}
         </div>
       );
+    }
+    if (stream) {
+      return <StreamingText text={content} onDone={() => setStreamingReply(null)} />;
     }
     return <div>{content}</div>;
   }
@@ -195,18 +260,22 @@ export default function ChatPage() {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             title="Collapse sidebar"
           >
-            ◧
+            <Icon name="panel-left" size={16} />
           </button>
         </div>
 
         <div className="drawer-actions">
           <button className="new-chat-btn" onClick={startNewChat}>
-            <span className="btn-icon">✏️</span>
+            <span className="btn-icon">
+              <Icon name="pencil" size={16} />
+            </span>
             <span>New chat</span>
           </button>
 
           <div className="search-box">
-            <span className="search-icon">🔍</span>
+            <span className="search-icon">
+              <Icon name="search" size={15} />
+            </span>
             <input
               type="text"
               placeholder="Search chats"
@@ -253,7 +322,7 @@ export default function ChatPage() {
             }}
             title="Settings & Account"
           >
-            ⚙️
+            <Icon name="settings" size={16} />
           </button>
         </div>
       </aside>
@@ -265,7 +334,7 @@ export default function ChatPage() {
             <div className="modal-header">
               <span className="user-email-tag">{user?.email}</span>
               <button className="icon-btn" onClick={() => setProfileModalOpen(false)}>
-                ✕
+                <Icon name="x" size={16} />
               </button>
             </div>
 
@@ -275,6 +344,86 @@ export default function ChatPage() {
             </div>
 
             <div className="modal-body">
+              {/* PAID DISPLAY NAME CHANGE — $1 USDC one-time via SubScript */}
+              <div className="modal-card">
+                <div className="card-row">
+                  <div>
+                    <strong>Display Name</strong>
+                    <div className="muted" style={{ fontSize: "0.82rem", marginTop: 2 }}>
+                      Currently <strong style={{ color: "var(--ink)" }}>{userName}</strong>
+                      {user?.hasCustomName ? "" : " (from your email)"}
+                    </div>
+                  </div>
+                  <span className="badge payg">${nameChangePrice} USDC</span>
+                </div>
+
+                {pendingName ? (
+                  <div className="name-change-pending">
+                    <div className="muted" style={{ fontSize: "0.82rem" }}>
+                      Waiting on payment to rename to{" "}
+                      <strong style={{ color: "var(--ink)" }}>{pendingName}</strong>. It applies
+                      as soon as the ${nameChangePrice} USDC clears.
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button
+                        className="btn small"
+                        style={{ width: "auto" }}
+                        onClick={() => {
+                          setNameInput(pendingName);
+                          startNameChange();
+                        }}
+                        disabled={nameBusy}
+                      >
+                        {nameBusy ? "Opening..." : "Resume payment"}
+                      </button>
+                      <button
+                        className="btn ghost small"
+                        style={{ width: "auto" }}
+                        onClick={cancelNameChange}
+                        disabled={nameBusy}
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <input
+                        type="text"
+                        placeholder="New display name"
+                        value={nameInput}
+                        maxLength={32}
+                        onChange={(e) => {
+                          setNameInput(e.target.value);
+                          setNameError(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") startNameChange();
+                        }}
+                        style={{ fontSize: "0.85rem", height: 38 }}
+                      />
+                      <button
+                        className="btn small"
+                        style={{ width: "auto", whiteSpace: "nowrap" }}
+                        onClick={startNameChange}
+                        disabled={nameBusy || !nameInput.trim()}
+                      >
+                        {nameBusy ? "Opening..." : `Pay $${nameChangePrice}`}
+                      </button>
+                    </div>
+                    <div className="muted" style={{ fontSize: "0.76rem", marginTop: 6 }}>
+                      2-32 characters. Charged once per change, in USDC via SubScript. The name
+                      only changes after payment clears.
+                    </div>
+                  </>
+                )}
+
+                {nameError && (
+                  <div className="name-change-error">{nameError}</div>
+                )}
+              </div>
+
               <div className="modal-card">
                 <div className="card-row">
                   <div>
@@ -292,7 +441,8 @@ export default function ChatPage() {
               <div className="modal-card">
                 <strong style={{ display: "block", marginBottom: 6 }}>Free Trial Progress</strong>
                 <div className="muted" style={{ fontSize: "0.84rem" }}>
-                  💬 {freeRemaining} of {user?.freeCap ?? 3} free trial messages remaining
+                  <Icon name="message" size={14} /> {freeRemaining} of{" "}
+                  {user?.freeCap ?? 3} free trial messages remaining
                 </div>
               </div>
 
@@ -328,14 +478,14 @@ export default function ChatPage() {
                 }}
                 title="Open Sidebar"
               >
-                ☰
+                <Icon name="menu" size={18} />
               </button>
             )}
           </div>
 
           <div className="topbar-right">
             <button className="icon-btn new-chat-icon" onClick={startNewChat} title="New Chat">
-              ✏️
+              <Icon name="pencil" size={16} />
             </button>
           </div>
         </header>
@@ -351,7 +501,7 @@ export default function ChatPage() {
                   <PillPromptBar
                     value={input}
                     onChange={(v) => setInput(v)}
-                    onSubmit={() => sendText(input)}
+                    onSubmit={(composed) => sendText(composed)}
                     disabled={!!busy}
                     planLabel={planLabel}
                     onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
@@ -361,7 +511,8 @@ export default function ChatPage() {
                     <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
                       <div className="dropdown-item header">Status: {planLabel}</div>
                       <a className="dropdown-item" href="/pricing">
-                        ⚡ SubScript Pay-As-You-Chat Setup
+                        <Icon name="zap" size={14} />
+                        <span>SubScript Pay-As-You-Chat Setup</span>
                       </a>
                     </div>
                   )}
@@ -390,30 +541,28 @@ export default function ChatPage() {
               </section>
             )}
 
-            {messages.map((m, i) => (
-              <div key={i} className={`msg ${m.role}`}>
-                {m.role === "assistant" && i === messages.length - 1 && (
-                  <ThinkingTrace duration="1.2s" />
-                )}
+            {messages.map((m, i) => {
+              const isLast = i === messages.length - 1;
+              const stream =
+                m.role === "assistant" && isLast && m.content === streamingReply;
+              return (
+                <div key={i} className={`msg ${m.role}`}>
+                  {renderMessageContent(m.content, stream)}
 
-                {renderMessageContent(m.content)}
-
-                {m.role === "user" && m.billed && (
-                  <span className="bill-tag">
-                    {m.billed === "free"
-                      ? "free message"
-                      : "billed $0.10 (pay-as-you-chat)"}
-                  </span>
-                )}
-              </div>
-            ))}
+                  {m.role === "user" && m.billed && (
+                    <span className="bill-tag">
+                      {m.billed === "free"
+                        ? "free message"
+                        : "billed $0.10 (pay-as-you-chat)"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
 
             {busy && (
               <div className="msg assistant muted">
-                <ThinkingTrace defaultExpanded steps={[
-                  { id: "1", label: "Generating response with Kris's Script...", status: "running" }
-                ]} />
-                <LoadingOrbit text="Kris's Script is thinking..." />
+                <LoadingState label="Thinking" variant="Drive" />
               </div>
             )}
 
@@ -423,7 +572,7 @@ export default function ChatPage() {
 
                 <div style={{ marginTop: 14, textAlign: "left", background: "#1c1d1f", padding: 14, borderRadius: 10, border: "1px solid var(--line-strong)" }}>
                   <span style={{ fontSize: "0.84rem", color: "#3dbb72", fontWeight: 650, display: "block", marginBottom: 6 }}>
-                    ⚡ Enable SubScript Pay-As-You-Go ($0.10/msg):
+                    <Icon name="zap" size={13} /> Enable SubScript Pay-As-You-Go ($0.10/msg):
                   </span>
                   <ol style={{ margin: "0 0 10px 0", paddingLeft: 18, fontSize: "0.82rem", color: "var(--ink-2)" }}>
                     <li>
@@ -438,7 +587,10 @@ export default function ChatPage() {
                         title="Click to copy merchant name"
                       >
                         <code className="merchant-tag">okechukwuanigba.sub</code>
-                        <span className="copy-badge">{copiedMerchant ? "✓ Copied!" : "📋 Copy"}</span>
+                        <span className="copy-badge">
+                          <Icon name={copiedMerchant ? "check" : "copy"} size={12} />
+                          <span>{copiedMerchant ? "Copied" : "Copy"}</span>
+                        </span>
                       </button>
                     </li>
                   </ol>
@@ -463,7 +615,8 @@ export default function ChatPage() {
 
                 <div style={{ marginTop: 12, textAlign: "center" }}>
                   <a className="btn ghost small" href="/pricing">
-                    Manage on Billing Page ↗
+                    <span>Manage on Billing Page</span>
+                    <Icon name="arrow-up-right" size={14} />
                   </a>
                 </div>
               </div>
@@ -476,7 +629,7 @@ export default function ChatPage() {
               <PillPromptBar
                 value={input}
                 onChange={(v) => setInput(v)}
-                onSubmit={() => sendText(input)}
+                onSubmit={(composed) => sendText(composed)}
                 disabled={!!busy}
                 planLabel={planLabel}
                 onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
@@ -486,7 +639,8 @@ export default function ChatPage() {
                 <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
                   <div className="dropdown-item header">Status: {planLabel}</div>
                   <a className="dropdown-item" href="/pricing">
-                    ⚡ SubScript Pay-As-You-Chat Setup
+                    <Icon name="zap" size={14} />
+                    <span>SubScript Pay-As-You-Chat Setup</span>
                   </a>
                 </div>
               )}

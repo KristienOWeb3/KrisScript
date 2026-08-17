@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Icon from "../components/Icon";
 
 type Transaction = {
   id: string;
@@ -67,7 +68,7 @@ export default function PricingPage() {
       const data = await res.json();
       await load();
       if (data.synced) {
-        showToast("⚡ Status synchronized with SubScript!");
+        showToast("Status synchronized with SubScript.");
       } else {
         showToast("Sync checked: No changes detected.");
       }
@@ -90,7 +91,7 @@ export default function PricingPage() {
     if (!res.ok) {
       setError(data.error);
     } else {
-      showToast(enabled ? "⚡ Pay-as-you-chat enabled!" : "Pay-as-you-chat disabled.");
+      showToast(enabled ? "Pay-as-you-chat enabled." : "Pay-as-you-chat disabled.");
       load();
     }
     setBusy("");
@@ -136,7 +137,9 @@ export default function PricingPage() {
 
         <div className="drawer-actions" style={{ marginTop: 12 }}>
           <a className="new-chat-btn" href="/chat" style={{ textDecoration: "none" }}>
-            <span className="btn-icon">💬</span>
+            <span className="btn-icon">
+              <Icon name="message" size={16} />
+            </span>
             <span>Back to Chat</span>
           </a>
         </div>
@@ -144,10 +147,12 @@ export default function PricingPage() {
         <div className="rail-section" style={{ marginTop: 16 }}>
           <div className="rail-label">Billing Options</div>
           <div className="recent-item">
-            <span className="recent-title">🎁 3 Free Trial Messages</span>
+            <Icon name="gift" size={14} />
+            <span className="recent-title">3 Free Trial Messages</span>
           </div>
           <div className="recent-item">
-            <span className="recent-title">⚡ SubScript Pay-As-You-Go ($0.10/msg)</span>
+            <Icon name="zap" size={14} />
+            <span className="recent-title">SubScript Pay-As-You-Go ($0.10/msg)</span>
           </div>
         </div>
 
@@ -166,7 +171,7 @@ export default function PricingPage() {
         <header className="topbar">
           <div className="topbar-left">
             <a className="icon-btn" href="/chat" title="Back to Chat">
-              ←
+              <Icon name="arrow-left" size={17} />
             </a>
             <div className="topbar-title">
               <strong style={{ fontSize: "1rem" }}>Pay-As-You-Go Billing</strong>
@@ -180,7 +185,14 @@ export default function PricingPage() {
               disabled={isSyncing}
               style={{ fontSize: "0.85rem", padding: "4px 10px" }}
             >
-              {isSyncing ? "Syncing..." : "🔄 Refresh Status"}
+              {isSyncing ? (
+                  "Syncing..."
+                ) : (
+                  <>
+                    <Icon name="refresh" size={14} />
+                    <span>Refresh Status</span>
+                  </>
+                )}
             </button>
             {me?.devMode && <span className="badge dev">DEV MODE</span>}
             {user && <span className="badge pro">{userPlanLabel}</span>}
@@ -222,7 +234,9 @@ export default function PricingPage() {
                 onClick={() => setPaymentMethod("subscript")}
               >
                 <div className="payment-method-radio" />
-                <div className="payment-method-icon">⚡</div>
+                <div className="payment-method-icon">
+                  <Icon name="zap" size={18} />
+                </div>
                 <div className="payment-method-details">
                   <strong>SubScript Pay-As-You-Go</strong>
                   <span>USDC on Arc Web3 Wallet</span>
@@ -234,7 +248,9 @@ export default function PricingPage() {
                 style={{ opacity: 0.45, cursor: "not-allowed" }}
               >
                 <div className="payment-method-radio" />
-                <div className="payment-method-icon">💳</div>
+                <div className="payment-method-icon">
+                  <Icon name="card" size={18} />
+                </div>
                 <div className="payment-method-details">
                   <strong>Card</strong>
                   <span>Credit / Debit Card (Disabled)</span>
@@ -277,7 +293,10 @@ export default function PricingPage() {
                 </div>
                 
                 <div className="payg-setup-box">
-                  <strong className="setup-title">⚡ SubScript Metered Vault Setup:</strong>
+                  <strong className="setup-title">
+                    <Icon name="zap" size={14} />
+                    <span>SubScript Metered Vault Setup:</span>
+                  </strong>
                   <ol className="setup-steps">
                     <li>
                       Go to <a href="https://dashboard.subscriptonarc.com/user" target="_blank" rel="noreferrer">SubScript User Dashboard</a> &rarr; <strong>Manage Commit</strong>.
@@ -291,7 +310,10 @@ export default function PricingPage() {
                         title="Click to copy merchant name"
                       >
                         <code className="merchant-tag">okechukwuanigba.sub</code>
-                        <span className="copy-badge">{copiedMerchant ? "✓ Copied!" : "📋 Copy"}</span>
+                        <span className="copy-badge">
+                          <Icon name={copiedMerchant ? "check" : "copy"} size={12} />
+                          <span>{copiedMerchant ? "Copied" : "Copy"}</span>
+                        </span>
                       </button>
                     </li>
                     <li>
@@ -409,7 +431,8 @@ export default function PricingPage() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Manage in SubScript DM ↗
+                <span>Manage in SubScript DM</span>
+                <Icon name="arrow-up-right" size={14} />
               </a>
             </div>
           </div>

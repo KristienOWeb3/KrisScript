@@ -1,5 +1,7 @@
 "use client";
 
+import Icon from "./Icon";
+
 import { useState } from "react";
 
 export default function CodeBlock({
@@ -31,7 +33,8 @@ export default function CodeBlock({
           <span className="code-lang-tag">{title || language}</span>
         </div>
         <button className="code-copy-btn" onClick={copyCode} type="button">
-          {copied ? "✓ Copied!" : "📋 Copy code"}
+          <Icon name={copied ? "check" : "copy"} size={13} />
+          <span>{copied ? "Copied" : "Copy code"}</span>
         </button>
       </div>
       <div className="code-block-body">
