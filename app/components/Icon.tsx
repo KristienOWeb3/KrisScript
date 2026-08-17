@@ -35,7 +35,8 @@ export type IconName =
   | "refresh"
   | "lightbulb"
   | "terminal"
-  | "model";
+  | "model"
+  | "more";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -124,10 +125,17 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   terminal: <path d="M4 17l6-6-6-6M12 19h8" />,
   model: <path d="M12 3l8 9-8 9-8-9 8-9z" />,
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="12" cy="12" r="1.4" />
+      <circle cx="19" cy="12" r="1.4" />
+    </>
+  ),
 };
 
 /** Icons whose geometry reads better filled than stroked. */
-const FILLED: ReadonlySet<IconName> = new Set<IconName>(["zap", "sparkle", "model"]);
+const FILLED: ReadonlySet<IconName> = new Set<IconName>(["zap", "sparkle", "model", "more"]);
 
 export default function Icon({
   name,

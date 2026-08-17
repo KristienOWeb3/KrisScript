@@ -6,6 +6,7 @@ import StreamingText from "../components/StreamingText";
 import PillPromptBar from "../components/PillPromptBar";
 import CodeBlock from "../components/CodeBlock";
 import Icon from "../components/Icon";
+import MessageActions from "../components/MessageActions";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
@@ -545,17 +546,30 @@ export default function ChatPage() {
               const isLast = i === messages.length - 1;
               const stream =
                 m.role === "assistant" && isLast && m.content === streamingReply;
-              return (
-                <div key={i} className={`msg ${m.role}`}>
-                  {renderMessageContent(m.content, stream)}
 
-                  {m.role === "user" && m.billed && (
-                    <span className="bill-tag">
-                      {m.billed === "free"
-                        ? "free message"
-                        : "billed $0.10 (pay-as-you-chat)"}
-                    </span>
-                  )}
+              // User turns are a pill that hugs its text; the billing note sits
+              // outside it so the pill stays one clean line.
+              if (m.role === "user") {
+                return (
+                  <div key={i} className="msg user">
+                    <div className="msg-bubble">{renderMessageContent(m.content)}</div>
+                    {m.billed && (
+                      <span className="bill-tag">
+                        {m.billed === "free"
+                          ? "free message"
+                          : "billed $0.10 (pay-as-you-chat)"}
+                      </span>
+                    )}
+                  </div>
+                );
+              }
+
+              // Assistant turns have no bubble — the reply sits on the canvas,
+              // with its action row underneath once the text has finished.
+              return (
+                <div key={i} className="msg assistant">
+                  {renderMessageContent(m.content, stream)}
+                  {!stream && <MessageActions content={m.content} />}
                 </div>
               );
             })}
