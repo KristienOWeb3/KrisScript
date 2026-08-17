@@ -1,7 +1,12 @@
 import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { hasRealKey } from "@/lib/subscript";
-import { FREE_MESSAGE_CAP, NAME_CHANGE_PRICE_USDC, formatUsdc } from "@/lib/plans";
+import {
+  FREE_MESSAGE_CAP,
+  NAME_CHANGE_PRICE_USDC,
+  PAYG_PRICE_USDC_MICROS,
+  microsToUsdc,
+} from "@/lib/plans";
 import { resolveDisplayName } from "@/lib/displayName";
 
 export async function GET() {
@@ -13,6 +18,20 @@ export async function GET() {
     [user.id]
   );
 
+  /* The accrued balance is computed from our own billing ledger rather than
+     mirrored out of users.payg_accrued. SubScript's report-usage returns
+     integer MICROS in a field named accruedUsageUsdc, so the stored value was
+     a micro count while the UI printed it as dollars — a real $2.20 balance
+     rendered as $2,200,000.00. Counting the messages we actually billed is
+     exact and does not depend on that field's units. */
+  const paygRow = await one<{ c: number }>(
+    "SELECT COUNT(*)::int AS c FROM messages WHERE user_id = $1 AND role = 'user' AND billed = 'payg'",
+    [user.id]
+  );
+  const paygAccrued = microsToUsdc(
+    BigInt(paygRow?.c ?? 0) * BigInt(PAYG_PRICE_USDC_MICROS)
+  );
+
   return Response.json({
     user: {
       email: user.email,
@@ -22,8 +41,8 @@ export async function GET() {
       freeCap: FREE_MESSAGE_CAP,
       paygEnabled: !!user.payg_enabled,
       walletAddress: user.wallet_address,
-      // Normalised here so every screen renders the same balance identically.
-      paygAccrued: formatUsdc(user.payg_accrued),
+      paygAccrued,
+      paygMessages: paygRow?.c ?? 0,
       displayName: resolveDisplayName(user.display_name, user.email),
       hasCustomName: !!user.display_name,
       pendingDisplayName: user.pending_display_name,

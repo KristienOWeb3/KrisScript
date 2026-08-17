@@ -154,15 +154,23 @@ export async function POST(req: Request) {
           { status: 502 }
         );
       }
-      /* SubScript's running total is authoritative when it sends one. When it
-         doesn't, the charge still succeeded (status 200), so add the price
-         locally — the previous code fell back to the OLD balance, which left
-         the user billed while the figure on screen never moved. */
+      /* Mirror SubScript's running vault total when it sends one, otherwise add
+         the price locally — the charge succeeded (status 200), so a missing
+         field must not leave the balance frozen.
+
+         accruedUsageUsdc is named for dollars but carries integer MICROS, in
+         keeping with the micro-denominated amounts the rest of the SubScript
+         API uses. Storing it verbatim is what produced balances like
+         "2200000" for $2.20. A value containing a decimal point is treated as
+         dollars, since only a micro count can be a bare integer. */
       const reported = usage.body?.accruedUsageUsdc;
-      const nextAccrued =
-        reported != null && Number.isFinite(Number(reported))
-          ? microsToUsdc(usdcToMicros(reported))
-          : microsToUsdc(usdcToMicros(user.payg_accrued) + BigInt(PAYG_PRICE_USDC_MICROS));
+      const reportedStr = reported == null ? "" : String(reported).trim();
+      const reportedUsable = reportedStr !== "" && Number.isFinite(Number(reportedStr));
+      const nextAccrued = reportedUsable
+        ? reportedStr.includes(".")
+          ? microsToUsdc(usdcToMicros(reportedStr))
+          : microsToUsdc(BigInt(reportedStr))
+        : microsToUsdc(usdcToMicros(user.payg_accrued) + BigInt(PAYG_PRICE_USDC_MICROS));
       await q("UPDATE users SET payg_accrued = $1 WHERE id = $2", [nextAccrued, user.id]);
     }
   }
