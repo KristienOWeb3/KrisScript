@@ -101,7 +101,7 @@ export default function PricingPage() {
   const userPlanLabel = user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial";
 
   return (
-    <div className="app-shell container">
+    <div className="app-shell">
       {/* TOAST NOTIFICATION POPUP */}
       {toastMessage && (
         <div

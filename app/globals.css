@@ -207,7 +207,7 @@ input[type="text"] {
   display: block;
   width: 100%;
   height: 44px;
-  background: #141a26;
+  background: var(--field);
   border: 1px solid var(--line);
   border-radius: 10px;
   color: var(--text);
@@ -257,7 +257,7 @@ input:focus {
 }
 
 .btn.secondary {
-  background: #1b2333;
+  background: var(--field);
   border-color: var(--line);
   color: var(--text);
 }
@@ -357,7 +357,7 @@ input:focus {
   margin: 20px 0;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #0e131d;
+  background: var(--canvas);
   padding: 18px;
 }
 
@@ -376,7 +376,7 @@ input:focus {
 
 .payment-method-option {
   border: 1px solid var(--line);
-  background: #141a26;
+  background: var(--inset);
   border-radius: 10px;
   padding: 14px;
   cursor: pointer;
@@ -430,28 +430,36 @@ input:focus {
 /* HORIZONTAL PLANS SCROLL / GRID (ALL DEVICES) */
 .plans-horizontal-wrap {
   width: 100%;
-  overflow-x: auto;
   padding: 6px 0 16px;
   margin-top: 18px;
   -webkit-overflow-scrolling: touch;
 }
 
+/* auto-fit, not a fixed repeat(4): there are two plans, and hardcoding four
+   tracks left them squashed into the left half of the row with two empty
+   columns beside them. Dropping min-content also stops the wrapper forcing
+   a horizontal scrollbar at widths where the cards already fit.
+
+   The minimum must be a plain length — a percentage or min() minimum makes
+   the track sizing indefinite, which stops auto-fit resolving a repetition
+   count and collapses the whole grid to one column. Narrow screens are
+   handled by the <=900px block, which overrides this to a single track. */
 .plans-horizontal {
   display: grid;
-  grid-template-columns: repeat(4, minmax(270px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
-  min-width: min-content;
+  align-items: stretch;
 }
 
 .plan-card {
-  background: #121824;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 22px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 440px;
+  min-height: 320px;
   position: relative;
   box-sizing: border-box;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -462,14 +470,14 @@ input:focus {
 }
 
 .plan-card.featured {
-  border-color: #3b82f6;
-  background: linear-gradient(180deg, #182236, #121824);
-  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15);
+  border-color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-tint), transparent 55%), var(--surface);
+  box-shadow: 0 10px 30px rgba(61, 154, 255, 0.12);
 }
 
 .plan-card.active-plan-card {
-  border-color: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px var(--green-tint);
 }
 
 .plan-card h3 {
@@ -525,7 +533,7 @@ input:focus {
 
 /* PAYG CARD STYLES */
 .payg-setup-box {
-  background: #0d121c;
+  background: var(--inset);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px;
@@ -583,13 +591,13 @@ input:focus {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  background: #141b29;
+  background: var(--inset);
   border-color: var(--line-strong);
 }
 
 .dm-notice-box {
   margin-top: 24px;
-  background: #0e131d;
+  background: var(--canvas);
   border-color: var(--line);
 }
 
@@ -909,7 +917,7 @@ input:focus {
 
 .profile-modal {
   width: min(440px, 100%);
-  background: #111622;
+  background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   padding: 24px;
@@ -962,7 +970,7 @@ input:focus {
 }
 
 .modal-card {
-  background: #171d2b;
+  background: var(--inset);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 16px;
@@ -976,13 +984,13 @@ input:focus {
 }
 
 .danger-btn {
-  background: rgba(255, 123, 114, 0.12) !important;
-  border-color: rgba(255, 123, 114, 0.3) !important;
-  color: #ff7b72 !important;
+  background: var(--red-tint) !important;
+  border-color: rgba(238, 92, 97, 0.32) !important;
+  color: var(--red) !important;
 }
 
 .danger-btn:hover {
-  background: rgba(255, 123, 114, 0.22) !important;
+  background: rgba(238, 92, 97, 0.24) !important;
 }
 
 /* TOPBAR HEADER */

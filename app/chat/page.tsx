@@ -430,7 +430,7 @@ export default function ChatPage() {
                   <div>
                     <strong>Billing Status</strong>
                     <div className="muted" style={{ fontSize: "0.82rem", marginTop: 2 }}>
-                      Current mode: <strong style={{ color: "#3d9aff" }}>{planLabel}</strong>
+                      Current mode: <strong style={{ color: "var(--accent)" }}>{planLabel}</strong>
                     </div>
                   </div>
                   <a className="btn small" href="/pricing">
@@ -451,9 +451,9 @@ export default function ChatPage() {
                 <strong style={{ display: "block", marginBottom: 4 }}>SubScript Pay-As-You-Chat Vault</strong>
                 <div className="muted" style={{ fontSize: "0.82rem" }}>
                   Status: {user?.paygEnabled ? (
-                    <span style={{ color: "#3dbb72" }}>Active Metered Billing (${user.paygAccrued} accrued)</span>
+                    <span style={{ color: "var(--green)" }}>Active Metered Billing (${user.paygAccrued} accrued)</span>
                   ) : (
-                    <span style={{ color: "#ee5c61" }}>Not Enabled</span>
+                    <span style={{ color: "var(--red)" }}>Not Enabled</span>
                   )}
                 </div>
               </div>
