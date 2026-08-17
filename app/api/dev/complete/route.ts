@@ -7,8 +7,18 @@ import type { Payment } from "@/lib/billing";
 /**
  * DEV MODE ONLY: simulates SubScript completing a checkout by POSTing a
  * signed payment.succeeded or subscription.* event to our own webhook endpoint.
+ *
+ * This route holds the webhook signing secret, so it can mint an event that
+ * /api/webhooks/subscript will accept as genuine. That makes it a complete
+ * bypass of the payment gate — any signed-in user could fulfill their own
+ * pending intent for free — so it must never be reachable in production. The
+ * docblock used to claim "DEV MODE ONLY" while nothing enforced it.
  */
 export async function POST(req: Request) {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    return Response.json({ error: "Not found." }, { status: 404 });
+  }
+
   const user = await currentUser();
   if (!user) return Response.json({ error: "Not signed in." }, { status: 401 });
 
