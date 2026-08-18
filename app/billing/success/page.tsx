@@ -176,13 +176,24 @@ export default function BillingSuccessPage() {
           </div>
         )}
 
-        {stillPending && user && elapsed >= 15 && (
+        {stillPending && user && elapsed >= 45 && (
+          <div className="notice-box">
+            Still waiting. SubScript queues deliveries and retries them, so this
+            can take a few minutes. It is safe to leave this page — the change
+            applies on its own once the charge clears, and stays visible as
+            pending under Settings until then.
+          </div>
+        )}
+
+        {stillPending && user && elapsed >= 300 && (
           <div className="error-box">
-            This is taking longer than expected. Kris&apos;s Script is still waiting
-            for the signed webhook — check that the SubScript webhook endpoint is
-            registered for this deployment and that its secret matches{" "}
-            <code>SUBSCRIPT_WEBHOOK_SECRET</code>.
-            {me?.devMode && " In dev mode, POST /api/dev/complete to simulate it."}
+            Nothing has arrived in five minutes, which usually means delivery is
+            failing rather than queued. Check this deployment&apos;s webhook
+            endpoint is registered in SubScript, that{" "}
+            <code>SUBSCRIPT_WEBHOOK_SECRET</code> matches the one for that
+            endpoint, and the function logs for{" "}
+            <code>/api/webhooks/subscript</code>.
+            {me?.devMode && " In dev, POST /api/dev/complete to simulate it."}
           </div>
         )}
 
