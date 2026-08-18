@@ -1,20 +1,22 @@
 import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { type Payment } from "@/lib/billing";
+import { reconcilePendingPayments, type Payment } from "@/lib/billing";
 
 /**
  * SubScript return landing.
  *
- * This endpoint deliberately does NOT fulfill anything. Every field it
+ * This endpoint never fulfills on the strength of the redirect. Every field it
  * receives comes from the browser, so a return hit proves only that someone
- * loaded the success URL — not that money moved. Previously it called
- * fulfillPayment() (and, for plans, wrote status = 'PAID' directly), which
+ * loaded the success URL — not that money moved. It once called
+ * fulfillPayment() directly (and, for plans, wrote status = 'PAID'), which
  * meant abandoning a checkout and then POSTing {"status":"success"} here was
  * enough to promote a pending display name or activate a paid plan for free.
  *
- * Fulfillment now happens only in /api/webhooks/subscript, which verifies
- * SubScript's HMAC signature. This route just reports what we are waiting on;
- * the success page already polls /api/me and renders the waiting state.
+ * What it does instead is ask SubScript directly whether the intent is paid,
+ * via reconcilePendingPayments(), and fulfill on that authoritative answer.
+ * SubScript remains the only thing that can authorise a grant — the browser
+ * still cannot — but we no longer depend on a webhook arriving, which in
+ * practice left genuinely paid charges unfulfilled for weeks.
  */
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -73,12 +75,19 @@ export async function POST(req: Request) {
     [eventId, "subscript.return.observed", rawBody]
   );
 
-  // Report the real state: has the verified webhook already landed?
-  const paid = payment.status === "PAID";
+  /* Ask SubScript about anything still unpaid, and fulfill what it confirms.
+     Cheap when nothing is pending, and idempotent — fulfillPayment claims the
+     row atomically, so racing with an arriving webhook is harmless. */
+  const reconciled = await reconcilePendingPayments(user.id);
+
+  const fresh = await one<Payment>("SELECT * FROM payments WHERE id = $1", [payment.id]);
+  const paid = (fresh ?? payment).status === "PAID";
   return Response.json({
     confirmed: paid,
     pending: !paid,
     product: payment.product,
-    ...(paid ? {} : { reason: "awaiting_webhook" }),
+    fulfilled: reconciled.fulfilled,
+    ...(reconciled.mismatched.length ? { mismatched: reconciled.mismatched } : {}),
+    ...(paid ? {} : { reason: "awaiting_confirmation" }),
   });
 }

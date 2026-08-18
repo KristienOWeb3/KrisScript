@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from "react";
  * SUBSCRIPT RETURN LANDING
  *
  * The redirect proves only that the browser came back, so this
- * page never claims a payment succeeded. It reports what it is
- * waiting for, polls /api/me until the verified webhook lands,
- * and then confirms the specific thing that was bought.
+ * page never claims a payment succeeded on its own. It asks the
+ * server to check with SubScript, retries on a cadence, and only
+ * then confirms the specific thing that was bought.
  *
  * Product-aware: a $1 name change has nothing to do with plans
  * or account activation, so it does not show them.
@@ -37,6 +37,7 @@ export default function BillingSuccessPage() {
   // after the webhook clears it.
   const requestedName = useRef<string | null>(null);
   const settled = useRef(false);
+  const elapsedRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,29 +62,39 @@ export default function BillingSuccessPage() {
       params.get("id") ||
       "auto_reconcile";
 
-    load();
-    fetch("/api/billing/confirm-return", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status,
-        checkoutId,
-        receiptId: params.get("subscript_receipt_id") || params.get("receipt_id"),
-        txHash: params.get("subscript_tx_hash") || params.get("tx_hash"),
-      }),
-    })
-      .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
-      .then(({ ok, body }) => {
-        if (cancelled) return;
-        if (ok && body.product) setProduct(body.product);
-        else if (body?.reason === "pending_payment_not_found") setLookupFailed(true);
+    /* confirm-return asks SubScript whether the intent is paid and fulfills on
+       its answer, so it is retried on a cadence rather than called once: the
+       user often lands here a moment before the charge settles. */
+    const confirm = () =>
+      fetch("/api/billing/confirm-return", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          checkoutId,
+          receiptId: params.get("subscript_receipt_id") || params.get("receipt_id"),
+          txHash: params.get("subscript_tx_hash") || params.get("tx_hash"),
+        }),
       })
-      .catch(() => !cancelled && setLookupFailed(true));
+        .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
+        .then(({ ok, body }) => {
+          if (cancelled) return;
+          if (ok && body.product) setProduct(body.product);
+          else if (body?.reason === "pending_payment_not_found") setLookupFailed(true);
+          return load();
+        })
+        .catch(() => !cancelled && setLookupFailed(true));
+
+    load();
+    confirm();
 
     const t = setInterval(() => {
       if (settled.current) return;
       setElapsed((n) => n + 3);
-      load();
+      // Re-ask SubScript every other tick; poll our own state every tick.
+      if (elapsedRef.current % 6 === 0) confirm();
+      else load();
+      elapsedRef.current += 3;
     }, 3000);
 
     return () => {
@@ -115,8 +126,8 @@ export default function BillingSuccessPage() {
           {heading}
         </h1>
         <p className="subtitle">
-          The redirect is not proof of payment — this unlocks only once the verified{" "}
-          <code>payment.succeeded</code> webhook has been processed.
+          The redirect is not proof of payment — this unlocks only once SubScript
+          itself confirms the charge.
         </p>
 
         {!me ? (
@@ -172,27 +183,24 @@ export default function BillingSuccessPage() {
         {lookupFailed && (
           <div className="error-box">
             No matching payment was found for your account. If you completed a
-            checkout, it will still apply when the webhook arrives.
+            checkout, it will still apply once SubScript confirms it.
           </div>
         )}
 
         {stillPending && user && elapsed >= 45 && (
           <div className="notice-box">
-            Still waiting. SubScript queues deliveries and retries them, so this
-            can take a few minutes. It is safe to leave this page — the change
-            applies on its own once the charge clears, and stays visible as
-            pending under Settings until then.
+            Still waiting on SubScript to report the charge as paid. It is safe to
+            leave this page — the change applies on its own once it clears, and
+            stays visible as pending under Settings until then.
           </div>
         )}
 
         {stillPending && user && elapsed >= 300 && (
           <div className="error-box">
-            Nothing has arrived in five minutes, which usually means delivery is
-            failing rather than queued. Check this deployment&apos;s webhook
-            endpoint is registered in SubScript, that{" "}
-            <code>SUBSCRIPT_WEBHOOK_SECRET</code> matches the one for that
-            endpoint, and the function logs for{" "}
-            <code>/api/webhooks/subscript</code>.
+            After five minutes SubScript still does not report this intent as
+            paid. If the charge did go through, check the function logs for{" "}
+            <code>/api/billing/reconcile</code> — an amount mismatch is refused
+            on purpose and logged rather than granted.
             {me?.devMode && " In dev, POST /api/dev/complete to simulate it."}
           </div>
         )}

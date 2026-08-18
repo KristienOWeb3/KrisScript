@@ -1,4 +1,5 @@
 import { q, one } from "./db";
+import { getIntent, intentIsPaid } from "./subscript";
 
 export type Payment = {
   id: string;
@@ -125,4 +126,58 @@ export async function handleSubscriptionEvent(
   }
 
   return { ok: true };
+}
+
+/**
+ * Ask SubScript whether this user's unpaid payments have in fact been paid, and
+ * fulfill the ones that have.
+ *
+ * Webhook delivery is the fast path but not a reliable one — a queue stalled on
+ * SubScript's side left real, paid charges unfulfilled for weeks here. This is
+ * the pull counterpart: SubScript is still the sole authority on whether money
+ * moved, so this grants nothing the browser asked for, it only stops us waiting
+ * to be told something we can look up.
+ *
+ * Fails closed. An unknown status, an unreachable API, a 404, or an amount that
+ * disagrees with what we recorded all leave the payment pending.
+ */
+export async function reconcilePendingPayments(
+  userId: number
+): Promise<{ checked: number; fulfilled: string[]; mismatched: string[] }> {
+  const { rows } = await q(
+    "SELECT * FROM payments WHERE user_id = $1 AND status <> 'PAID' ORDER BY created_at ASC",
+    [userId]
+  );
+  const pending = rows as Payment[];
+
+  const fulfilled: string[] = [];
+  const mismatched: string[] = [];
+
+  for (const payment of pending) {
+    if (!payment.intent_id) continue;
+    // Subscriptions carry a sub_ id and are not one-time intents.
+    if (payment.intent_id.startsWith("sub_")) continue;
+
+    const { intent } = await getIntent(payment.intent_id);
+    if (!intent || !intentIsPaid(intent)) continue;
+
+    /* Verify the amount before granting anything. Without this, an intent for a
+       cheaper product could be pointed at an expensive payment row. */
+    const reported = String(
+      intent.amountUsdcMicros ?? intent.amount_usdc_micros ?? ""
+    ).trim();
+    if (reported !== String(payment.amount_micros).trim()) {
+      mismatched.push(payment.id);
+      console.warn(
+        `[reconcile] amount mismatch for ${payment.id}: intent reports ${reported}, we recorded ${payment.amount_micros}`
+      );
+      continue;
+    }
+
+    const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
+    const result = await fulfillPayment(payment.intent_id, externalReference, intent);
+    if (result.ok && !result.already) fulfilled.push(payment.id);
+  }
+
+  return { checked: pending.length, fulfilled, mismatched };
 }

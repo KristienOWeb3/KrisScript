@@ -273,6 +273,43 @@ export async function cancelSubscription(
   return { status: res.status, body };
 }
 
+/**
+ * Fetch a one-time checkout intent by id (GET /api/intent/<id>).
+ *
+ * This is what makes fulfillment independent of webhook delivery: SubScript
+ * remains the authority on whether money moved, but we can ask instead of
+ * waiting to be told. Returns `intent: undefined` when the answer is unknown
+ * (dev mode, 404, transport error) so callers fail closed.
+ */
+export async function getIntent(
+  id: string
+): Promise<{ status: number; intent?: any }> {
+  // No real key means no real intents exist; never claim one is paid.
+  if (!hasRealKey()) return { status: 200, intent: undefined };
+  try {
+    const res = await fetch(`${BASE}/api/intent/${encodeURIComponent(id)}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+    });
+    const body = await res.json().catch(() => ({} as any));
+    if (!res.ok) return { status: res.status, intent: undefined };
+    return { status: res.status, intent: body.intent ?? body.data ?? body };
+  } catch {
+    return { status: 0, intent: undefined };
+  }
+}
+
+/**
+ * Statuses that mean the money actually arrived. An allow-list rather than a
+ * deny-list: an unrecognised status must never read as paid.
+ */
+const PAID_INTENT_STATUSES = new Set(["PAID", "SUCCEEDED", "COMPLETED"]);
+
+export function intentIsPaid(intent: any): boolean {
+  const raw = intent?.status;
+  return typeof raw === "string" && PAID_INTENT_STATUSES.has(raw.trim().toUpperCase());
+}
+
 /** Fetch a subscription by ID from Subscript API (GET /api/v1/subscriptions). */
 export async function getSubscription(
   id: string
