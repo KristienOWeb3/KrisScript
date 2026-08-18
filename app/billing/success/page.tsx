@@ -30,6 +30,10 @@ type Me = {
 export default function BillingSuccessPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [product, setProduct] = useState<string | null>(null);
+  /* Authoritative: the server says this payment is PAID. Never inferred from
+     watching pending_display_name, which reconciliation may clear before this
+     page ever observes it. */
+  const [confirmed, setConfirmed] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
@@ -80,7 +84,8 @@ export default function BillingSuccessPage() {
         .then(({ ok, body }) => {
           if (cancelled) return;
           if (ok && body.product) setProduct(body.product);
-          else if (body?.reason === "pending_payment_not_found") setLookupFailed(true);
+          if (ok && body.confirmed) setConfirmed(true);
+          if (body?.reason === "pending_payment_not_found") setLookupFailed(true);
           return load();
         })
         .catch(() => !cancelled && setLookupFailed(true));
@@ -106,14 +111,12 @@ export default function BillingSuccessPage() {
   const user = me?.user;
   const isNameChange = product === "name_change";
 
-  // A name change is done when the parked name has been promoted.
-  const nameSettled =
-    isNameChange &&
-    !!requestedName.current &&
-    !user?.pendingDisplayName &&
-    user?.displayName === requestedName.current;
-
-  const stillPending = isNameChange ? !nameSettled : !user?.activated;
+  /* Settled purely on the server's answer. Deriving it from the pending name
+     instead was the bug: reconciliation now fulfills during the first
+     confirm-return call, so pending_display_name is often already cleared by
+     the time this page first reads /api/me, and a check that required having
+     seen it could never pass. */
+  const stillPending = !confirmed;
   if (!stillPending) settled.current = true;
 
   const heading = stillPending ? "Confirming your payment" : "Payment confirmed";
@@ -137,8 +140,8 @@ export default function BillingSuccessPage() {
             You are signed out, so this payment cannot be matched to an account.
           </div>
         ) : isNameChange ? (
-          <div className={nameSettled ? "notice-box" : "error-box"}>
-            {nameSettled ? (
+          <div className={confirmed ? "notice-box" : "error-box"}>
+            {confirmed ? (
               <>
                 Your display name is now <strong>{user.displayName}</strong>.
               </>
