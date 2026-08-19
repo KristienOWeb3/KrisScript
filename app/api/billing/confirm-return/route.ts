@@ -40,6 +40,7 @@ export async function POST(req: Request) {
 
   // Locate the payment this return is about — for reporting only.
   let payment: Payment | undefined;
+  let matched = false;
   if (searchId && searchId !== "pending" && searchId !== "auto_reconcile") {
     payment = await one<Payment>(
       "SELECT * FROM payments WHERE user_id = $1 AND intent_id = $2 ORDER BY created_at DESC LIMIT 1",
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
         [user.id, `sub_${searchId}`]
       );
     }
+    matched = !!payment;
   }
   if (!payment) {
     payment = await one<Payment>(
@@ -81,11 +83,32 @@ export async function POST(req: Request) {
   const reconciled = await reconcilePendingPayments(user.id);
 
   const fresh = await one<Payment>("SELECT * FROM payments WHERE id = $1", [payment.id]);
-  const paid = (fresh ?? payment).status === "PAID";
+  const current = fresh ?? payment;
+  const paid = current.status === "PAID";
+
+  /* Only claim a charge is in flight when we have reason to believe one is.
+     Without a matching checkout id we fell back to this user's newest payment
+     of any age or status, so an abandoned checkout from days ago made the
+     return page report a charge the user never completed and wait on it
+     forever. An unmatched, unpaid, not-recent row is reported as "nothing to
+     confirm" instead of being presented as pending. */
+  const ageSeconds = Math.max(0, Math.floor(Date.now() / 1000) - Number(current.created_at || 0));
+  const RECENT_SECONDS = 30 * 60;
+  if (!paid && !matched && ageSeconds > RECENT_SECONDS) {
+    return Response.json({
+      confirmed: false,
+      pending: false,
+      reason: "no_recent_payment",
+      fulfilled: reconciled.fulfilled,
+    });
+  }
+
   return Response.json({
     confirmed: paid,
     pending: !paid,
-    product: payment.product,
+    product: current.product,
+    matched,
+    ageSeconds,
     fulfilled: reconciled.fulfilled,
     ...(reconciled.mismatched.length ? { mismatched: reconciled.mismatched } : {}),
     ...(paid ? {} : { reason: "awaiting_confirmation" }),

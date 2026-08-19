@@ -1,5 +1,5 @@
 import { q, one } from "./db";
-import { getIntent, intentIsPaid } from "./subscript";
+import { getIntent, intentIsPaid, getSubscription, hasRealKey } from "./subscript";
 import { PLAN_ORDER, getPlan, planIsActive, planPeriodStart } from "./plans";
 
 export type Payment = {
@@ -119,6 +119,17 @@ export async function handleSubscriptionEvent(
        WHERE id = $4`,
       [planName, now + thirtyDays, subId, userId]
     );
+    /* Settle the originating payment row too. This function only ever touched
+       users, so a subscription could be fully active while its payment stayed
+       PENDING forever — and anything keyed off payment status, such as the
+       return page, could never report it as confirmed. confirm-return used to
+       write PAID itself, which masked this until that was removed. */
+    if (subId) {
+      await q(
+        "UPDATE payments SET status = 'PAID' WHERE intent_id = $1 AND status <> 'PAID'",
+        [subId]
+      );
+    }
   } else if (type === "subscription.canceled" || type === "subscription.deleted") {
     await q(
       "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
@@ -156,8 +167,38 @@ export async function reconcilePendingPayments(
 
   for (const payment of pending) {
     if (!payment.intent_id) continue;
-    // Subscriptions carry a sub_ id and are not one-time intents.
-    if (payment.intent_id.startsWith("sub_")) continue;
+
+    /* Subscriptions are not one-time intents, so GET /api/intent does not apply
+       to them. Without this branch they had no pull path at all and stayed
+       pending indefinitely whenever the webhook failed to arrive. SubScript
+       reports them as active / incomplete / canceled; only active counts. */
+    if (payment.intent_id.startsWith("sub_")) {
+      // The dev stub reports every subscription active — never grant on that.
+      if (!hasRealKey()) continue;
+      const { subscription } = await getSubscription(payment.intent_id);
+      if (!subscription) continue;
+      if (String(subscription.status ?? "").trim().toLowerCase() !== "active") continue;
+
+      const subAmount = String(
+        subscription.amountUsdcMicros ?? subscription.amount_usdc_micros ?? ""
+      ).trim();
+      if (subAmount !== String(payment.amount_micros).trim()) {
+        mismatched.push(payment.id);
+        console.warn(
+          `[reconcile] subscription amount mismatch for ${payment.id}: SubScript reports ${subAmount}, we recorded ${payment.amount_micros}`
+        );
+        continue;
+      }
+
+      const result = await handleSubscriptionEvent("subscription.created", {
+        subscription_id: payment.intent_id,
+        status: "active",
+        external_reference: `${payment.product}:${payment.user_id}:${payment.id}`,
+        amount_usdc_micros: payment.amount_micros,
+      });
+      if (result.ok) fulfilled.push(payment.id);
+      continue;
+    }
 
     const { intent } = await getIntent(payment.intent_id);
     if (!intent || !intentIsPaid(intent)) continue;
