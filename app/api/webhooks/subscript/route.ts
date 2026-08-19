@@ -1,6 +1,12 @@
 import { q } from "@/lib/db";
-import { verifyWebhookSignature, hasWebhookSecret } from "@/lib/subscript";
-import { fulfillPayment, handleSubscriptionEvent } from "@/lib/billing";
+import {
+  verifyWebhookSignature,
+  hasWebhookSecret,
+  eventObject,
+  environmentMismatch,
+  field,
+} from "@/lib/subscript";
+import { fulfillPayment, markPaymentFailed, handleSubscriptionEvent } from "@/lib/billing";
 
 /**
  * SubScript webhook receiver.
@@ -43,6 +49,24 @@ export async function POST(req: Request) {
     [event.id, event.type, rawBody]
   );
 
+  /* Real deliveries nest the payload under data.object; our own simulator and
+     everything already in webhook_events is flat. eventObject() reads both. */
+  const payload = eventObject(event.data);
+
+  /* Refuse anything stamped for the other environment. A TEST event arriving at
+     a live deployment would otherwise grant a real plan for a sandbox charge.
+     4xx rather than 2xx so it is not retried and shows up as a failure on the
+     sending side — this is a misconfiguration, not something to swallow. */
+  const envProblem = environmentMismatch(payload);
+  if (envProblem) {
+    console.error(`[webhook] rejected ${event.type}: ${envProblem}`);
+    await q("UPDATE webhook_events SET error = $2 WHERE id = $1", [
+      event.id,
+      `environment_mismatch: ${envProblem}`,
+    ]);
+    return Response.json({ error: `Environment mismatch — ${envProblem}` }, { status: 400 });
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const claim = await q(
     "UPDATE webhook_events SET processing_at = $2, error = NULL WHERE id = $1 AND processed_at IS NULL AND (processing_at IS NULL OR processing_at < $3)",
@@ -55,14 +79,28 @@ export async function POST(req: Request) {
   try {
     // "payment.success" is SubScript's documented legacy alias.
     if (event.type === "payment.succeeded" || event.type === "payment.success") {
-      const result = await fulfillPayment(event.data?.intent_id, event.data?.merchant_reference, event.data);
+      const result = await fulfillPayment(
+        field(payload, "intent_id"),
+        field(payload, "merchant_reference", "merchant_customer_id", "external_reference"),
+        payload
+      );
       if (!result.ok) {
-        console.warn("[webhook] payment.succeeded for unknown payment", event.data);
+        console.warn("[webhook] payment.succeeded for unknown payment", payload);
+      }
+    } else if (event.type === "payment.failed") {
+      /* Recorded so the charge stops looking like one still in flight.
+         payment.pending needs nothing: the row is already PENDING. */
+      const result = await markPaymentFailed(
+        field(payload, "intent_id"),
+        field(payload, "merchant_reference", "merchant_customer_id", "external_reference")
+      );
+      if (!result.ok) {
+        console.warn("[webhook] payment.failed for unknown payment", payload);
       }
     } else if (typeof event.type === "string" && event.type.startsWith("subscription.")) {
-      const result = await handleSubscriptionEvent(event.type, event.data ?? {});
+      const result = await handleSubscriptionEvent(event.type, payload);
       if (!result.ok) {
-        console.warn(`[webhook] ${event.type} for unknown subscription`, event.data);
+        console.warn(`[webhook] ${event.type} not applied (${result.reason})`, payload);
       }
     }
     await q(

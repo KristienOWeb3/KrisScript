@@ -8,7 +8,7 @@ import {
   microsToUsdc,
 } from "@/lib/plans";
 import { resolveDisplayName } from "@/lib/displayName";
-import { planQuota } from "@/lib/billing";
+import { planQuota, subAlertMessage } from "@/lib/billing";
 
 export async function GET() {
   const user = await currentUser();
@@ -49,6 +49,12 @@ export async function GET() {
       planRemaining: quota.remaining,
       planExpiresAt: quota.expiresAt,
       subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
+      subStatus: user.sub_status ?? null,
+      /* A standing advisory from the subscription lifecycle. allowance_low is
+         the one that needs to reach the subscriber: the spending authorization
+         is running out of cycles and only re-authorizing fixes it. */
+      subAlert: user.sub_alert ?? null,
+      subAlertMessage: subAlertMessage(user.sub_alert),
       freeUsed: freeRow?.c ?? 0,
       freeCap: FREE_MESSAGE_CAP,
       paygEnabled: !!user.payg_enabled,

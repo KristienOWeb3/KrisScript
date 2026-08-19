@@ -18,8 +18,13 @@ export type User = {
   payg_enabled: number;
   wallet_address: string | null;
   payg_accrued: string;
+  /** The current on-chain authorization. Changes when a subscriber resumes. */
   subscription_id: string | null;
+  /** The checkout session the subscription came from. Stable across a resume. */
+  sub_checkout_id: string | null;
   sub_status: string | null;
+  /** Standing lifecycle advisory, e.g. 'allowance_low'. Null when all is well. */
+  sub_alert: string | null;
   sub_cancel_at_period_end: number;
   display_name: string | null;
   pending_display_name: string | null;

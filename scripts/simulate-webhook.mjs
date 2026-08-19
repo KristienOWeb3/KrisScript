@@ -49,11 +49,17 @@ const event = {
   id: `evt_sim_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
   type: "payment.succeeded",
   created: Math.floor(Date.now() / 1000),
+  // Real deliveries nest the payload under data.object and stamp the
+  // environment; the receiver reads both this and the older flat shape.
   data: {
-    intent_id: intentId,
-    currency: "USDC",
-    transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
-    chain_id: 5042002,
+    object: {
+      intent_id: intentId,
+      environment: "TEST",
+      livemode: false,
+      currency: "USDC",
+      transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
+      chain_id: 5042002,
+    },
   },
 };
 

@@ -61,9 +61,26 @@ function DevCheckout() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            <option value="default">Default (Created / Succeeded)</option>
-            <option value="subscription.renewed">subscription.renewed (Extend 7 Days)</option>
-            <option value="subscription.canceled">subscription.canceled (Mark Canceled)</option>
+            <option value="default">Default (Activated / Succeeded)</option>
+            <option value="subscription.activated">subscription.activated (grant plan)</option>
+            <option value="subscription.renewed">subscription.renewed (extend a period)</option>
+            <option value="subscription.cancel_scheduled">
+              subscription.cancel_scheduled (cancel at period end)
+            </option>
+            <option value="subscription.canceled">subscription.canceled (mark canceled)</option>
+            <option value="subscription.reactivated">
+              subscription.reactivated (resume, new id, no charge)
+            </option>
+            <option value="subscription.payment_failed">
+              subscription.payment_failed (past due)
+            </option>
+            <option value="subscription.allowance_low">
+              subscription.allowance_low (re-authorization needed)
+            </option>
+            <option value="subscription.renewal_upcoming">
+              subscription.renewal_upcoming (advance notice)
+            </option>
+            <option value="payment.failed">payment.failed (mark charge failed)</option>
           </select>
         </div>
 

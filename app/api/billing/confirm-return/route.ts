@@ -86,6 +86,20 @@ export async function POST(req: Request) {
   const current = fresh ?? payment;
   const paid = current.status === "PAID";
 
+  /* A charge SubScript has settled as over is not "still pending". Abandoned
+     checkouts now expire after 24 hours instead of sitting at incomplete
+     forever, so the return page can say so rather than waiting indefinitely. */
+  if (!paid && (current.status === "EXPIRED" || current.status === "FAILED")) {
+    return Response.json({
+      confirmed: false,
+      pending: false,
+      product: current.product,
+      matched,
+      reason: current.status === "EXPIRED" ? "checkout_expired" : "payment_failed",
+      fulfilled: reconciled.fulfilled,
+    });
+  }
+
   /* Only claim a charge is in flight when we have reason to believe one is.
      Without a matching checkout id we fell back to this user's newest payment
      of any age or status, so an abandoned checkout from days ago made the

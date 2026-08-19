@@ -25,5 +25,6 @@ export async function POST() {
     fulfilled: result.fulfilled,
     fulfilledCount: result.fulfilled.length,
     ...(result.mismatched.length ? { mismatched: result.mismatched } : {}),
+    ...(result.expired.length ? { expired: result.expired } : {}),
   });
 }

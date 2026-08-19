@@ -63,9 +63,11 @@ The script signs the payload exactly per SubScript's documented scheme (`t=<unix
 
 - **Fulfillment only via verified webhook** — never from the success redirect (per SubScript's own rules).
 - Webhook events are stored with processing state and marked processed only after fulfillment succeeds, so replays are acknowledged and transient failures can retry safely; payments are also idempotent at the row level.
-- Billing precedence per message: **active weekly plan → pay-as-you-chat → free cap (3)**.
-- Pro = 100 messages/day; Pro Max = unlimited; renewing the same plan extends the period, switching plans starts a fresh 7 days.
-- Pro / Pro Max are **real recurring subscriptions** via `POST /api/v1/subscriptions` with `interval: "weekly"`, a wallet-bound `subscriber`, and `publishToDm: true` so SubScript can publish the recurring offer into the merchant DM plan flow. SubScript re-charges automatically and fires `subscription.renewed`, which extends access another period; `subscription.canceled` sets cancel-at-period-end. The $1 activation stays a one-time checkout intent. See [GRADING.md](GRADING.md).
+- Billing precedence per message: **active monthly plan → pay-as-you-chat → free cap (3)**.
+- Pro = 10 messages/month, Pro Max = 25, Ultra = 50. Switching tiers starts a fresh period; renewing is SubScript's job.
+- The tiers are **real recurring subscriptions** via `POST /api/v1/subscriptions` with `interval: "monthly"`, an `externalReference` of `user:<id>:plan:<tier>`, and a `subscriber` only when the account has a genuine `0x` address (`publishToDm` needs a live merchant key, so it stays off in sandbox). The $1 activation and the $1 name change stay one-time checkout intents. See [GRADING.md](GRADING.md).
+- Subscription events handled: `activated`, `updated`, `renewed`, `reactivated`, `cancel_scheduled`, `canceled`, `payment_failed`, `renewal_upcoming`, `trial_ending`, `allowance_low`. **A resume mints a new `subscription_id`** and names the old one in `previous_subscription_id`, so entitlements are keyed on our own `externalReference` (returned as `merchant_customer_id`) and never on the subscription id. Nothing is charged at a resume, so it restores status without extending the period.
+- Deliveries are read from `data.object`, accepted in either snake_case or camelCase, and refused with a 400 when the event's `environment` disagrees with the configured key.
 
 ## Project map
 
@@ -74,7 +76,7 @@ app/api/billing/checkout   Create SubScript checkout intents ($1 / $2 / $5)
 app/api/billing/payg       Enable/disable pay-as-you-chat + wallet address
 app/api/webhooks/subscript HMAC verification, atomic event claim, fulfillment
 app/api/chat               Message gating + DeepSeek + $0.10 usage reporting
-app/api/dev/complete       Dev-mode simulated checkout completion (disabled with real keys)
+app/api/dev/complete       Dev-mode simulated checkout completion (404s in production)
 lib/subscript.ts           All SubScript API calls + signature verify/sign
 lib/billing.ts             Idempotent payment fulfillment
 scripts/simulate-webhook.mjs  Local webhook replay tool

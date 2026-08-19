@@ -52,18 +52,20 @@ export async function POST(req: Request) {
       /* wallet_address may hold a commit id ("cmt_...") rather than an
          address, since pay-as-you-chat accepts either. Sending a commit id
          here is rejected as "invalid subscriber address", so only pass a
-         genuine 0x address and omit the field otherwise.
-
-         createSubscription only forwards externalReference alongside
-         subscriber, so omitting it means the webhook arrives without our
-         reference — handleSubscriptionEvent then maps the event via the
-         subscription id stored on the payments row below, which is why that
-         UPDATE matters. */
+         genuine 0x address and omit the field otherwise. */
       subscriber: isWalletAddress(user.wallet_address) ? user.wallet_address! : undefined,
+      /* Our stable key for this customer. Comes back on every subscription
+         event as merchant_customer_id / external_reference, and is returned by
+         GET /api/v1/subscriptions, so the mapping survives both a missed
+         delivery and a resume — which mints a new subscription id. */
       externalReference: `user:${user.id}:plan:${plan}`,
       idempotencyKey: paymentId,
     });
 
+    /* Records the checkout session id. The on-chain subscription id lands on
+       users.subscription_id with the first subscription event; this row is what
+       handleSubscriptionEvent falls back to when an event carries neither our
+       reference nor a known id. */
     await q("UPDATE payments SET intent_id = $1 WHERE id = $2", [
       subscription.id,
       paymentId,

@@ -12,14 +12,13 @@ prose is clear, whether examples paste and run, whether the reading order builds
 
 ## Still open
 
-| Item | Status on 2026-08-19 |
-|---|---|
-| `GET /api/v1/subscriptions/:id` to poll subscription state | **Not shipped.** No route under `src/app/api/v1/subscriptions/`. Subscription state still arrives by webhook only, so a support tool can't answer "is this customer active?" without its own mirror of the lifecycle events. |
+Nothing. The last item closed on 2026-08-19.
 
 ## Resolved since July
 
 | July finding | Now |
 |---|---|
+| "`GET /api/v1/subscriptions/:id` to poll subscription state" | Shipped, confirmed by the merchant note of 2026-08-19. Accepts either the on-chain subscription id or the checkout id. The list now also returns `subscriptionId`, `externalReference` and `currentPeriodEnd`, and takes `?status=` and `?externalReference=` filters — so a support tool can answer "is this customer active, and until when?" without mirroring the lifecycle events. `status` is derived from the live subscription rather than the checkout, which is what made it report cancelled subscriptions as `active` indefinitely. |
 | "Reconcile the subscription docs around `/api/intent`, `/api/v1/subscriptions`, `/api/v1/plans`, and `publishToDm`, with a clear when-to-use-which table" | Shipped. The endpoint-selection table is on the docs overview and in every agent surface, and it's test-enforced — the suite fails if any of the five billing models loses its row. |
 | "Document the customer vault deposit flow + add `GET /api/user/vault/status`" | Shipped 2026-07-10. The usage page documents the readiness read, the commit flow with a dashboard URL to send the customer to, the `commit-config` policy endpoint, and both denial cases. |
 | "Add `GET /api/intent/:id` for polling" | Shipped 2026-07-10, with the legacy `?id=` query form still supported. |
@@ -36,8 +35,12 @@ The qualitative read was accurate and still is:
   window.
 - Docs precision is the strength. Exact endpoint paths, the exact signature-header regex, raw body
   before parse, atomic event claim. An agent can implement it correctly first try, and this repo did.
-- Recurring subscriptions are real and well-shaped, with a clean `incomplete → active → canceled`
-  lifecycle and matching webhooks.
+- Recurring subscriptions are real and well-shaped. The lifecycle has since grown past
+  `incomplete → active → canceled` to include `past_due` and `expired`, a resume
+  (`subscription.reactivated`) that charges nothing and lands inside the period already paid for, and
+  advance notices for renewals, trials and a spending authorization running out of cycles. Each has a
+  matching webhook. The one sharp edge is that a resume mints a **new** `subscription_id`, so any
+  integration keyed on that id loses the customer — `externalReference` is the key that survives.
 
 The B+ on docs quality was fair for the prose then and the prose has only grown: the guide is now 17
 routed sections, each with a plain-Markdown twin, plus the whole guide as one file at `/docs.txt`.

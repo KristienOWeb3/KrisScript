@@ -1,7 +1,8 @@
 import crypto from "crypto";
 import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { signWebhook } from "@/lib/subscript";
+import { signWebhook, expectedEnvironment } from "@/lib/subscript";
+import { isPlanId, PLAN_DURATION_SECONDS } from "@/lib/plans";
 import type { Payment } from "@/lib/billing";
 
 /**
@@ -51,13 +52,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const isSubscription = payment.product === "pro" || payment.product === "promax" || payment.product === "ultra";
+  const isSubscription = isPlanId(payment.product);
   const externalReference = `${payment.product}:${payment.user_id}:${payment.id}`;
-  
+
   const targetType =
-    eventType || (isSubscription ? "subscription.created" : "payment.succeeded");
+    eventType || (isSubscription ? "subscription.activated" : "payment.succeeded");
+  const kind = targetType.replace(/^subscription\./, "");
+  const now = Math.floor(Date.now() / 1000);
+  const environment = expectedEnvironment() ?? "TEST";
 
   let eventData: any = {
+    // Deliveries are stamped with their environment; an unstamped one used to
+    // be dead-lettered. The receiver rejects a stamp that disagrees with the
+    // configured key, so simulate the one this deployment expects.
+    environment,
+    livemode: environment === "LIVE",
     amount_usdc_micros: payment.amount_micros,
     currency: "USDC",
     transaction_hash: `0x${crypto.randomBytes(32).toString("hex")}`,
@@ -65,13 +74,35 @@ export async function POST(req: Request) {
     simulated: true,
   };
 
-  if (isSubscription) {
+  if (isSubscription && targetType.startsWith("subscription.")) {
+    const resumedId = `sub_resumed_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const winding = kind === "canceled" || kind === "cancel_scheduled";
     eventData = {
       ...eventData,
-      subscription_id: payment.intent_id,
-      status: targetType.endsWith("canceled") ? "canceled" : "active",
+      /* A resume mints a NEW authorization and names the one it replaces —
+         the whole point of the reactivated event. Everything else keeps the
+         id the checkout produced. */
+      subscription_id: kind === "reactivated" ? resumedId : payment.intent_id,
+      ...(kind === "reactivated"
+        ? {
+            previous_subscription_id: user.subscription_id || payment.intent_id,
+            churn_kind: "voluntary",
+            days_since_churn: 0,
+            reason: "Resumed by subscriber inside the paid period; nothing charged",
+          }
+        : {}),
+      source_checkout_id: payment.intent_id,
+      status: winding ? "canceled" : kind === "payment_failed" ? "past_due" : "active",
+      cancel_at_period_end: winding,
+      /* Both spellings of the reference, as real deliveries send. */
       external_reference: externalReference,
-      cancel_at_period_end: targetType.endsWith("canceled"),
+      merchantCustomerId: externalReference,
+      /* Stated period end, so expiry does not have to be derived. Deliberately
+         omitted for a resume: nothing is charged, the subscriber keeps the
+         period they already paid for, and the handler must not extend it. */
+      ...(kind === "activated" || kind === "renewed" || kind === "created"
+        ? { current_period_end_timestamp: now + PLAN_DURATION_SECONDS }
+        : {}),
     };
   } else {
     eventData = {
@@ -85,8 +116,9 @@ export async function POST(req: Request) {
   const event = {
     id: `evt_dev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
     type: targetType,
-    created: Math.floor(Date.now() / 1000),
-    data: eventData,
+    created: now,
+    // Real deliveries nest the payload one level down, under data.object.
+    data: { object: eventData },
   };
 
   const rawBody = JSON.stringify(event);

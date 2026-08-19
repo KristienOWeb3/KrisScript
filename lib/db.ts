@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS users (
   wallet_address TEXT,
   payg_accrued TEXT NOT NULL DEFAULT '0',
   subscription_id TEXT,
+  sub_checkout_id TEXT,
   sub_status TEXT,
+  sub_alert TEXT,
   sub_cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
   display_name TEXT,
   pending_display_name TEXT,
@@ -25,6 +27,17 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_id TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_status TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_cancel_at_period_end INTEGER NOT NULL DEFAULT 0;
+-- A resume mints a NEW subscription id, so subscription_id is the current
+-- authorization rather than a stable handle on the customer. The checkout
+-- session is tracked separately: it is what payments.intent_id records at
+-- creation, while only the on-chain subscription_id is accepted for cancel.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_checkout_id TEXT;
+-- Standing advisory from the subscription lifecycle: 'allowance_low',
+-- 'renewal_upcoming', 'trial_ending', 'payment_failed'. Cleared whenever the
+-- subscription next activates, renews or resumes. allowance_low in particular
+-- cannot be resolved by topping up USDC — the subscriber must re-authorize —
+-- so it has to reach them rather than sit in a log.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_alert TEXT;
 -- Paid display-name change: the requested name is parked in
 -- pending_display_name until the $1 USDC payment is fulfilled.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
@@ -68,6 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(user_id, thread_id);
 CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(intent_id);
 CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_sub_id ON users(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_users_sub_checkout ON users(sub_checkout_id);
 CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet_address);
 `;
 

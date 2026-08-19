@@ -41,6 +41,100 @@ export function appUrl(): string {
   return url.replace(/\/$/, "");
 }
 
+/* ── Webhook event envelope ───────────────────────────────────────────
+ * Two shapes have to be read interchangeably.
+ *
+ * Real deliveries nest the payload under `data.object` and emit every field
+ * twice, once snake_case and once camelCase, with identical values
+ * (`merchant_customer_id` / `merchantCustomerId`). Our own dev simulation and
+ * the events already stored in webhook_events are flat snake_case. Reading
+ * through eventObject() + field() means one handler serves all of them, and a
+ * stored event can still be replayed after this change.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** Unwrap `data.object` when present; otherwise treat `data` as the payload. */
+export function eventObject(data: any): any {
+  if (data && typeof data === "object" && data.object && typeof data.object === "object") {
+    return data.object;
+  }
+  return data ?? {};
+}
+
+function toCamel(snake: string): string {
+  return snake.replace(/_([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
+}
+
+/**
+ * Read a field by its snake_case name, accepting the camelCase spelling too,
+ * and try each name in order. Absent means undefined/null/"" — `false` and `0`
+ * are real values and come back as themselves.
+ */
+export function field(obj: any, ...names: string[]): any {
+  if (!obj || typeof obj !== "object") return undefined;
+  for (const name of names) {
+    for (const key of name === toCamel(name) ? [name] : [name, toCamel(name)]) {
+      const value = obj[key];
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Normalise a timestamp to epoch seconds. Accepts seconds, milliseconds and
+ * ISO strings, since the same logical field arrives in all three forms
+ * (`currentPeriodEnd` as ISO, `currentPeriodEndTimestamp` as a number).
+ */
+export function toEpochSeconds(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const raw = String(value).trim();
+  if (typeof value === "number" || /^\d+$/.test(raw)) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    // Anything past year 5138 in seconds is really milliseconds.
+    return n > 1e11 ? Math.floor(n / 1000) : Math.floor(n);
+  }
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : null;
+}
+
+/** Which environment this deployment's key belongs to, or null in dev mode. */
+export function expectedEnvironment(): "LIVE" | "TEST" | null {
+  const key = process.env.SUBSCRIPT_SECRET_KEY;
+  if (!key) return null;
+  return key.startsWith("sk_live_") ? "LIVE" : "TEST";
+}
+
+/**
+ * Describe an environment mismatch, or null when the event is acceptable.
+ *
+ * Events carry `environment` (TEST/LIVE) and `livemode`, and a delivery whose
+ * environment disagrees with our key must not be fulfilled: a TEST event
+ * reaching a live deployment would grant a real plan for a sandbox charge.
+ *
+ * Silence when either side is unstamped rather than guessing. Dev mode has no
+ * key to compare against, and our own simulated events carry no environment.
+ */
+export function environmentMismatch(obj: any): string | null {
+  const expected = expectedEnvironment();
+  if (!expected) return null;
+
+  const stamped = field(obj, "environment");
+  const livemode = field(obj, "livemode");
+  const actual =
+    typeof stamped === "string" && stamped.trim()
+      ? stamped.trim().toUpperCase()
+      : typeof livemode === "boolean"
+        ? livemode
+          ? "LIVE"
+          : "TEST"
+        : null;
+
+  if (!actual || (actual !== "LIVE" && actual !== "TEST")) return null;
+  if (actual === expected) return null;
+  return `event is ${actual}, this deployment's key is ${expected}`;
+}
+
 export class SubScriptError extends Error {
   code?: string;
   requestId?: string;
@@ -145,6 +239,8 @@ export async function createIntent(opts: {
 export type SubscriptionResult = {
   devMode: boolean;
   subscription: {
+    /** The checkout session id. The on-chain subscription id — the one DELETE
+     *  requires — arrives later, on the first subscription event. */
     id: string;
     checkoutUrl: string;
     status: string;
@@ -190,10 +286,21 @@ export async function createSubscription(opts: {
     // SubScript's live DM plan publication is not supported by sandbox/test
     // keys. Keep recurring checkout testable with sk_test_* keys, and only
     // publish into the DM plan flow when using a live merchant key.
-    publishToDm: key.startsWith("sk_live_") ? (opts.publishToDm ?? false) : false,
-    ...(opts.subscriber
-      ? { subscriber: opts.subscriber, externalReference: opts.externalReference }
-      : {}),
+    publishToDm: isLiveKey ? (opts.publishToDm ?? false) : false,
+    /* Always send our own reference, whether or not we have a subscriber
+       address. It is the stable key every subscription event carries back as
+       merchant_customer_id / external_reference, and the only field that
+       survives a resume — resuming mints a new subscription id, so anything
+       keyed on the id alone loses the customer. It is also now returned by
+       GET /api/v1/subscriptions, which makes the mapping recoverable after a
+       missed delivery. Previously this was sent only alongside `subscriber`,
+       so a user without a wallet address produced events with no reference at
+       all and fulfillment leaned entirely on the id recorded at creation. */
+    externalReference: opts.externalReference,
+    /* wallet_address may hold a commit id rather than an address; the API
+       rejects a commit id here with "invalid subscriber address", so the
+       caller passes undefined unless it has a genuine 0x address. */
+    ...(opts.subscriber ? { subscriber: opts.subscriber } : {}),
     idempotencyKey: opts.idempotencyKey,
     sandbox: !isLiveKey,
   };
@@ -239,7 +346,14 @@ export async function createSubscription(opts: {
   };
 }
 
-/** Cancel a subscription (DELETE /api/v1/subscriptions?id=). */
+/**
+ * Cancel a subscription (DELETE /api/v1/subscriptions?id=).
+ *
+ * Pass the on-chain subscription id — the checkout id the create call returns
+ * is not accepted here. users.subscription_id holds the on-chain id once any
+ * subscription event has been processed; users.sub_checkout_id holds the
+ * checkout session, and is only a last resort.
+ */
 export async function cancelSubscription(
   id: string,
   userAddress?: string
@@ -310,30 +424,92 @@ export function intentIsPaid(intent: any): boolean {
   return typeof raw === "string" && PAID_INTENT_STATUSES.has(raw.trim().toUpperCase());
 }
 
-/** Fetch a subscription by ID from Subscript API (GET /api/v1/subscriptions). */
+/**
+ * Every id a subscription record answers to: the on-chain subscription id, the
+ * checkout session it came from, and our own reference.
+ *
+ * `subscriber` is included because /api/billing/sync falls back to looking a
+ * subscription up by the user's wallet address when it has no id to work with.
+ */
+function subscriptionIdentifiers(sub: any): string[] {
+  return [
+    sub?.id,
+    field(sub, "subscription_id"),
+    field(sub, "checkout_id"),
+    field(sub, "source_checkout_id"),
+    field(sub, "external_reference"),
+    field(sub, "merchant_customer_id"),
+    field(sub, "subscriber"),
+  ]
+    .filter((v) => typeof v === "string" && v.trim())
+    .map((v: string) => v.trim().toLowerCase());
+}
+
+/**
+ * List subscriptions, optionally filtered server-side.
+ *
+ * `?externalReference=` is the useful one here: our reference is stable across
+ * a resume, so it finds the customer's current subscription even after the id
+ * has changed underneath us.
+ */
+export async function listSubscriptions(
+  filter: { externalReference?: string; status?: string } = {}
+): Promise<{ status: number; subscriptions: any[] }> {
+  if (!hasRealKey()) return { status: 200, subscriptions: [] };
+  const params = new URLSearchParams();
+  if (filter.externalReference) params.set("externalReference", filter.externalReference);
+  if (filter.status) params.set("status", filter.status);
+  const suffix = params.toString() ? `?${params}` : "";
+  try {
+    const res = await fetch(`${BASE}/api/v1/subscriptions${suffix}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+    });
+    const body = await res.json().catch(() => ({} as any));
+    if (!res.ok) return { status: res.status, subscriptions: [] };
+    const list: any[] =
+      body.data || body.subscriptions || (Array.isArray(body) ? body : []);
+    return { status: res.status, subscriptions: Array.isArray(list) ? list : [] };
+  } catch {
+    return { status: 0, subscriptions: [] };
+  }
+}
+
+/**
+ * Fetch one subscription, by on-chain id or by checkout id.
+ *
+ * Prefers GET /api/v1/subscriptions/{id}, which accepts either id form. Falls
+ * back to listing and matching exactly. The previous implementation only had
+ * the list, and matched with `cleanId.includes(sId)` — a substring test that
+ * could return a different customer's subscription, and did nothing to
+ * distinguish the checkout id (which is what we record at creation) from the
+ * on-chain id (which is what DELETE needs).
+ */
 export async function getSubscription(
   id: string
 ): Promise<{ status: number; subscription?: any }> {
   if (!hasRealKey()) return { status: 200, subscription: { id, status: "active", devMode: true } };
-  const res = await fetch(`${BASE}/api/v1/subscriptions`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { status: res.status, subscription: null };
-  const list: any[] = body.data || body.subscriptions || (Array.isArray(body) ? body : []);
-  const cleanId = id.toLowerCase().trim();
-  const sub = list.find((s) => {
-    const sId = (s.id || "").toLowerCase();
-    const sSub = (s.subscriber || "").toLowerCase();
-    return (
-      sId === cleanId ||
-      sId === `sub_${cleanId}` ||
-      cleanId.includes(sId) ||
-      (sSub && sSub === cleanId)
-    );
-  });
-  return { status: res.status, subscription: sub || null };
+  const wanted = id.trim().toLowerCase();
+
+  try {
+    const res = await fetch(`${BASE}/api/v1/subscriptions/${encodeURIComponent(id.trim())}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+    });
+    if (res.ok) {
+      const body = await res.json().catch(() => ({} as any));
+      const sub = body.subscription ?? body.data ?? body;
+      if (sub && typeof sub === "object" && subscriptionIdentifiers(sub).length) {
+        return { status: res.status, subscription: sub };
+      }
+    }
+  } catch {
+    /* Fall through to the list. */
+  }
+
+  const { status, subscriptions } = await listSubscriptions();
+  const sub = subscriptions.find((s) => subscriptionIdentifiers(s).includes(wanted));
+  return { status, subscription: sub || null };
 }
 
 /**
