@@ -341,13 +341,26 @@ export async function getSubscription(
  * (POST /api/user/vault/report-usage). Returns HTTP status + parsed body;
  * 402 means the vault is inactive / balance exhausted.
  */
+/**
+ * True only for a real on-chain address.
+ *
+ * users.wallet_address deliberately holds EITHER a SubScript commit id
+ * ("cmt_...") or a wallet address ("0x..."), because the pay-as-you-chat setup
+ * accepts both and report-usage branches on which it got. Anything that needs
+ * an actual address — the subscriptions API rejects a commit id with
+ * "invalid subscriber address" — must check first rather than pass it through.
+ */
+export function isWalletAddress(value: string | null | undefined): boolean {
+  return typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+}
+
 export async function reportUsage(
   userAddressOrCommitId: string,
   amountUsdcMicros: string,
   requestId: string
 ): Promise<{ status: number; body: any }> {
   const target = userAddressOrCommitId.trim();
-  const isCommit = target.startsWith("cmt_") || !/^0x[a-fA-F0-9]{40}$/.test(target);
+  const isCommit = target.startsWith("cmt_") || !isWalletAddress(target);
   const payload: Record<string, string> = { amountUsdcMicros };
   if (isCommit) {
     payload.commitId = target;

@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { createSubscription, SubScriptError } from "@/lib/subscript";
+import { createSubscription, isWalletAddress, SubScriptError } from "@/lib/subscript";
 import { PLANS, PLAN_INTERVAL, isPlanId, planIsActive } from "@/lib/plans";
 
 /**
@@ -49,9 +49,17 @@ export async function POST(req: Request) {
       description: `${tier.messages} messages per month`,
       amountUsdcMicros: tier.priceUsdcMicros,
       interval: PLAN_INTERVAL,
-      // Only sent when a subscriber address is known; handleSubscriptionEvent
-      // falls back to the subscription id below when it is absent.
-      subscriber: user.wallet_address || undefined,
+      /* wallet_address may hold a commit id ("cmt_...") rather than an
+         address, since pay-as-you-chat accepts either. Sending a commit id
+         here is rejected as "invalid subscriber address", so only pass a
+         genuine 0x address and omit the field otherwise.
+
+         createSubscription only forwards externalReference alongside
+         subscriber, so omitting it means the webhook arrives without our
+         reference — handleSubscriptionEvent then maps the event via the
+         subscription id stored on the payments row below, which is why that
+         UPDATE matters. */
+      subscriber: isWalletAddress(user.wallet_address) ? user.wallet_address! : undefined,
       externalReference: `user:${user.id}:plan:${plan}`,
       idempotencyKey: paymentId,
     });
