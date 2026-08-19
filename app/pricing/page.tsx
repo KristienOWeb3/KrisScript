@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Icon from "../components/Icon";
-import { PLANS, PLAN_ORDER } from "@/lib/plans";
+import { PLANS, PLAN_ORDER, tierView } from "@/lib/plans";
 
 type Transaction = {
   id: string;
@@ -144,11 +144,11 @@ export default function PricingPage() {
   /* Same rule as /chat: nothing derived from `user` is rendered until
      /api/me answers, so no account briefly sees another's placeholder. */
   const loading = !me;
-  const userPlanLabel = user?.planActive
-    ? user.planName
-    : user?.paygEnabled
-      ? "Pay-As-You-Chat"
-      : "Free Trial";
+  /* Same tier derivation as /chat, from the one shared definition. */
+  const tier = tierView(user);
+  const planAllowance = user?.planActive
+    ? `${user.planRemaining} of ${user.planCap} messages left this month`
+    : null;
   const displayName = user?.displayName || user?.email?.split("@")[0] || "";
 
   return (
@@ -221,7 +221,7 @@ export default function PricingPage() {
               <div className="avatar">{displayName.charAt(0).toUpperCase()}</div>
               <div className="profile-details">
                 <span className="profile-name">{displayName}</span>
-                <span className="badge pro">{userPlanLabel}</span>
+                <span className={`badge ${tier.id}`}>{tier.label}</span>
               </div>
             </div>
           )}
@@ -256,7 +256,7 @@ export default function PricingPage() {
                 )}
             </button>
             {me?.devMode && <span className="badge dev">DEV MODE</span>}
-            {user && <span className="badge pro">{userPlanLabel}</span>}
+            {user && <span className={`badge ${tier.id}`}>{tier.label}</span>}
           </div>
         </header>
 
@@ -275,13 +275,26 @@ export default function PricingPage() {
           {user && (
             <div className="notice-box user-status-banner">
               <div className="status-banner-left">
-                <span>Current Status: <strong>{userPlanLabel}</strong></span>
+                <span>
+                  Current plan:{" "}
+                  <span className={`badge ${tier.id}`}>{tier.label}</span>
+                </span>
+                {planAllowance && (
+                  <span>
+                    {" · "}
+                    <strong>{planAllowance}</strong>
+                    {user.subCancelAtPeriodEnd && " · cancels at period end"}
+                  </span>
+                )}
                 <span> · Trial Used: <strong>{user.freeUsed ?? 0} / {user.freeCap ?? 0} free messages</strong></span>
                 {user.paygEnabled && (
                   <span> · Accrued Usage: <strong>${user.paygAccrued} USDC</strong></span>
                 )}
               </div>
             </div>
+          )}
+          {user?.subAlertMessage && (
+            <div className="notice-box plan-alert-note">{user.subAlertMessage}</div>
           )}
 
           {error && <div className="error-box">{error}</div>}

@@ -11,6 +11,8 @@ type Props = {
   disabled?: boolean;
   placeholder?: string;
   planLabel?: string;
+  /** Plan id / "payg" / "free", used to colour the pill's status dot. */
+  tierId?: string;
   onTogglePlan?: () => void;
 };
 
@@ -43,6 +45,7 @@ export default function PillPromptBar({
   disabled,
   placeholder = "Ask Kris's Script or type / for commands, @ for context...",
   planLabel,
+  tierId,
   onTogglePlan,
 }: Props) {
   const [showCommands, setShowCommands] = useState(false);
@@ -391,7 +394,7 @@ export default function PillPromptBar({
         {planLabel && (
           <div className="embedded-plan-wrap">
             <button
-              className="embedded-plan-pill"
+              className={`embedded-plan-pill${tierId ? ` tier-${tierId}` : ""}`}
               type="button"
               onClick={() => onTogglePlan && onTogglePlan()}
             >

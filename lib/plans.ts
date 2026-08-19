@@ -94,6 +94,39 @@ export function planIsActive(
   return !!planExpiresAt && planExpiresAt > nowSeconds;
 }
 
+/* ── Which tier the account is on ─────────────────────────────────────
+ * One definition shared by every surface that names the tier, so /chat and
+ * /pricing cannot disagree about what someone is paying for.
+ *
+ * The tier is a different question from "what pays for the next message".
+ * They were previously answered by a single label, which meant the tier
+ * disappeared: a subscriber with free trial messages left was shown as
+ * "Free Trial (3 left)" with their tier named nowhere in the app.
+ * ─────────────────────────────────────────────────────────────────── */
+
+export type TierView = {
+  /** Plan id, or "payg" / "free". Doubles as the badge modifier class. */
+  id: string;
+  label: string;
+  /** True only for a paid subscription tier. */
+  paid: boolean;
+};
+
+/** Reads the shape /api/me returns, where `plan` is already resolved. */
+export function tierView(user: {
+  plan?: string | null;
+  planName?: string | null;
+  planActive?: boolean;
+  paygEnabled?: boolean;
+} | null | undefined): TierView {
+  const plan = user?.plan;
+  if (user?.planActive && isPlanId(plan)) {
+    return { id: plan, label: user.planName || PLANS[plan].name, paid: true };
+  }
+  if (user?.paygEnabled) return { id: "payg", label: "Pay-As-You-Chat", paid: false };
+  return { id: "free", label: "Free", paid: false };
+}
+
 /* ── USDC money helpers ───────────────────────────────────────────────
  * Balances are held as TEXT in the database and arrive from SubScript as
  * arbitrary numeric strings ("0.1", "0.100000", "1e-1"). Arithmetic runs

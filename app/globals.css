@@ -888,6 +888,16 @@ input:focus {
   text-overflow: ellipsis;
 }
 
+/* The allowance, under the tier badge. Two lines because the tier and what
+   pays for the next message are different facts. */
+.profile-plan-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .settings-gear {
   font-size: 1.1rem;
   background: transparent;
@@ -1064,9 +1074,29 @@ input:focus {
 }
 
 .embedded-plan-pill .dot {
-  color: var(--ink-3);
-  font-size: 1rem;
-  line-height: 0;
+  /* A real dot, carrying the tier's colour. It was an empty span with a text
+     colour and no content, so it rendered nothing at all. */
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex: 0 0 auto;
+}
+
+.embedded-plan-pill.tier-pro .dot {
+  background: var(--blue);
+}
+
+.embedded-plan-pill.tier-promax .dot {
+  background: var(--amber);
+}
+
+.embedded-plan-pill.tier-ultra .dot {
+  background: #f472b6;
+}
+
+.embedded-plan-pill.tier-payg .dot {
+  background: var(--green);
 }
 
 .embedded-plan-pill .caret {
@@ -1112,6 +1142,37 @@ input:focus {
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   margin-bottom: 4px;
+}
+
+/* Tier + allowance at the top of the plan dropdown. The tier leads, since the
+   badge is the thing that names what the account is actually paying for. */
+.plan-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 9px 11px 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.plan-status-meta {
+  font-size: 0.77rem;
+  color: var(--muted);
+}
+
+/* Standing subscription advisory. allowance_low is the one that matters: the
+   spending authorization is running out of cycles and only re-authorizing
+   fixes it, so it must not read as decoration. */
+.plan-alert-note {
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(246, 199, 107, 0.3);
+  background: rgba(246, 199, 107, 0.08);
+  color: var(--amber);
+  font-size: 0.76rem;
+  line-height: 1.4;
 }
 
 /* MAIN CHAT CANVAS & DESKTOP HERO */

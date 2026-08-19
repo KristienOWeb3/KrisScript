@@ -7,21 +7,16 @@ import PillPromptBar from "../components/PillPromptBar";
 import CodeBlock from "../components/CodeBlock";
 import Icon from "../components/Icon";
 import MessageActions from "../components/MessageActions";
+import { PLANS, tierView } from "../../lib/plans";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
 
-/** messages.billed holds "free", "payg", or a plan id. */
-const PLAN_LABELS: Record<string, string> = {
-  pro: "Pro",
-  promax: "Pro Max",
-  ultra: "Ultra",
-};
-
 function billLabel(billed: string): string {
   if (billed === "free") return "free message";
   if (billed === "payg") return "billed $0.10 (pay-as-you-chat)";
-  const name = PLAN_LABELS[billed];
+  /* messages.billed holds "free", "payg", or a plan id. */
+  const name = billed in PLANS ? PLANS[billed as keyof typeof PLANS].name : undefined;
   return name ? `included in ${name}` : billed;
 }
 type RecentThread = { threadId: string; title: string; createdAt: number };
@@ -216,17 +211,37 @@ export default function ChatPage() {
   const loading = !me;
   const isPayg = !!user?.paygEnabled;
   const freeRemaining = Math.max(0, (user?.freeCap ?? 0) - (user?.freeUsed ?? 0));
-  /* Precedence matches the chat gate: free trial first, then plan allowance,
-     then metered. Whichever will actually pay for the next message is shown. */
   const planActive = !!user?.planActive;
-  const planLabel = freeRemaining > 0
-    ? `Free Trial (${freeRemaining} left)`
-    : planActive
-      ? `${user.planName} (${user.planRemaining} of ${user.planCap} left)`
-      : isPayg
-        ? "Pay-As-You-Chat ($0.10/msg)"
-        : "No messages left";
-  const badgeClass = isPayg ? "pro" : "free";
+
+  /* The tier, named and coloured in its own right. Kept separate from the
+     allowance below because one label could only ever tell you one of the two,
+     and it told you the wrong one: a paying Ultra subscriber with trial
+     messages left read as "Free Trial (3 left)", with "Ultra" nowhere on the
+     page. tierView is shared with /pricing so the two cannot disagree. */
+  const tier = tierView(user);
+
+  /* What the next message will actually be billed against, in the same
+     precedence the chat gate applies: free trial, then plan allowance, then
+     metered. */
+  const allowanceLabel =
+    freeRemaining > 0
+      ? `${freeRemaining} free trial message${freeRemaining === 1 ? "" : "s"} left`
+      : planActive
+        ? `${user.planRemaining} of ${user.planCap} left this month`
+        : isPayg
+          ? "$0.10 per message"
+          : "No messages left";
+  /* Short form, for the pill wedged in beside the send button. */
+  const allowanceShort =
+    freeRemaining > 0
+      ? `${freeRemaining} free left`
+      : planActive
+        ? `${user.planRemaining}/${user.planCap} left`
+        : isPayg
+          ? "$0.10/msg"
+          : "0 left";
+  const cancelsAtPeriodEnd = planActive && !!user?.subCancelAtPeriodEnd;
+  const planLabel = `${tier.label} · ${allowanceShort}`;
   const userName = user?.displayName || user?.email?.split("@")[0] || "";
   const userInitials = userName.charAt(0).toUpperCase();
   const pendingName: string | null = user?.pendingDisplayName ?? null;
@@ -234,6 +249,28 @@ export default function ChatPage() {
 
   const filteredRecents = recents.filter((r) =>
     r.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  /* One definition, rendered from both composer positions (empty-state hero and
+     the docked composer) rather than kept in sync as two copies. Leads with the
+     tier, since that is the thing the rest of the UI could not tell you. */
+  const planDropdown = (
+    <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
+      <div className="plan-status">
+        <span className={`badge ${tier.id}`}>{tier.label}</span>
+        <span className="plan-status-meta">
+          {allowanceLabel}
+          {cancelsAtPeriodEnd && " · ends at period end"}
+        </span>
+      </div>
+      {user?.subAlertMessage && (
+        <div className="plan-alert-note">{user.subAlertMessage}</div>
+      )}
+      <a className="dropdown-item" href="/pricing">
+        <Icon name="zap" size={14} />
+        <span>{tier.paid ? "Manage plan" : "Plans & Pay-As-You-Chat"}</span>
+      </a>
+    </div>
   );
 
   function renderMessageContent(content: string, stream = false) {
@@ -351,7 +388,11 @@ export default function ChatPage() {
               <div className="avatar">{userInitials}</div>
               <div className="profile-details">
                 <span className="profile-name">{userName}</span>
-                <span className={`badge ${badgeClass}`}>{planLabel}</span>
+                <span className={`badge ${tier.id}`}>{tier.label}</span>
+                <span className="profile-plan-meta">
+                  {allowanceLabel}
+                  {cancelsAtPeriodEnd && " · ends at period end"}
+                </span>
               </div>
             </div>
           )}
@@ -471,11 +512,17 @@ export default function ChatPage() {
                   <div>
                     <strong>Billing Status</strong>
                     <div className="muted" style={{ fontSize: "0.82rem", marginTop: 2 }}>
-                      Current mode: <strong style={{ color: "var(--accent)" }}>{planLabel}</strong>
+                      Current plan:{" "}
+                      <strong style={{ color: "var(--accent)" }}>{tier.label}</strong>
+                      {` · ${allowanceLabel}`}
+                      {cancelsAtPeriodEnd && " · cancels at period end"}
                     </div>
+                    {user?.subAlertMessage && (
+                      <div className="plan-alert-note">{user.subAlertMessage}</div>
+                    )}
                   </div>
                   <a className="btn small" href="/pricing">
-                    Configure PAYG
+                    {tier.paid ? "Manage plan" : "Plans & PAYG"}
                   </a>
                 </div>
               </div>
@@ -546,18 +593,11 @@ export default function ChatPage() {
                     onSubmit={(composed) => sendText(composed)}
                     disabled={!!busy}
                     planLabel={loading ? undefined : planLabel}
+                    tierId={tier.id}
                     onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
                   />
 
-                  {planDropdownOpen && (
-                    <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                      <div className="dropdown-item header">Status: {planLabel}</div>
-                      <a className="dropdown-item" href="/pricing">
-                        <Icon name="zap" size={14} />
-                        <span>SubScript Pay-As-You-Chat Setup</span>
-                      </a>
-                    </div>
-                  )}
+                  {planDropdownOpen && planDropdown}
                 </div>
 
                 <div className="prompt-row">
@@ -683,18 +723,11 @@ export default function ChatPage() {
                 onSubmit={(composed) => sendText(composed)}
                 disabled={!!busy}
                 planLabel={loading ? undefined : planLabel}
+                tierId={tier.id}
                 onTogglePlan={() => setPlanDropdownOpen(!planDropdownOpen)}
               />
 
-              {planDropdownOpen && (
-                <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-                  <div className="dropdown-item header">Status: {planLabel}</div>
-                  <a className="dropdown-item" href="/pricing">
-                    <Icon name="zap" size={14} />
-                    <span>SubScript Pay-As-You-Chat Setup</span>
-                  </a>
-                </div>
-              )}
+              {planDropdownOpen && planDropdown}
             </div>
           )}
         </main>
