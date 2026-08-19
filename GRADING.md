@@ -1,44 +1,62 @@
-# SubScript Integration Report Card
+# SubScript integration report card
 
-Graded while building Kris's Script (July 2026), based on SubScript's public site + developer docs and implementing all three advertised payment methods. **Caveat:** graded from documentation and a full local integration; live sandbox execution still requires a merchant API key (see README "Going live").
+Originally graded July 2026 while building Kris's Script, from SubScript's public site and developer
+docs. Re-verified against the SubScript repo on **2026-08-19**. Almost everything this file docked
+points for has since shipped, and two of its findings were wrong when written. What follows is what's
+true now.
 
-## Claim verification
+**What belongs in this file.** Anything a check can settle no longer lives here. Those claims are
+assertions in `src/app/docs/__tests__/docs-quality.test.mjs`, so a regression fails a build instead
+of sitting wrong in Markdown for a month. What stays here is judgment a test can't make: whether the
+prose is clear, whether examples paste and run, whether the reading order builds.
 
-| Claim | Verdict | Evidence |
-|---|---|---|
-| **One-time payments** | ✅ True | `POST /api/intent` → hosted checkout → HMAC-signed `payment.succeeded` webhook. Fully documented with field tables, error codes, idempotency, and sandbox mode. |
-| **Subscription billing** | ✅ True | Real recurring subscriptions exist: `POST /api/v1/subscriptions` with `interval` (weekly/monthly/…), lifecycle `incomplete → active → canceled`, and `subscription.created` / `subscription.renewed` / `subscription.payment_failed` / `subscription.canceled` webhooks. Kris's Script Pro/Pro Max now use this with a wallet-bound `subscriber` and `publishToDm: true`, so new checkouts can publish into SubScript's DM plan flow. **Caveat:** historical one-time intents cannot be converted into plans because they have no billing interval. |
-| **Payment for service (usage-based)** | ⚠️ Half documented | Merchant side is clean (`POST /api/user/vault/report-usage`, `402` when exhausted). But the **customer-side vault deposit flow is undocumented** — no hosted deposit page, no wallet-connect flow, no `GET` endpoint to check a customer's vault status. You can bill usage but can't onboard the payer from docs alone. |
+## Still open
 
-## Grade: Human developers — **B**
+| Item | Status on 2026-08-19 |
+|---|---|
+| `GET /api/v1/subscriptions/:id` to poll subscription state | **Not shipped.** No route under `src/app/api/v1/subscriptions/`. Subscription state still arrives by webhook only, so a support tool can't answer "is this customer active?" without its own mirror of the lifecycle events. |
 
-| Area | Grade | Notes |
-|---|---|---|
-| One-time checkout API | A− | Stripe-like mental model: intent → redirect → webhook. Integer micro-USDC amounts avoid float bugs. Idempotency keys replay correctly (200 vs 201). |
-| Docs quality | B+ | Excellent field tables, copy-pasteable webhook verification code, error-code table with `request_id`, go-live checklist. |
-| Webhooks | B+ | Standard `t=…,v1=…` HMAC scheme, replay window, retry semantics all specified. Missing: a CLI/dashboard "send test event" trigger (Stripe's `stripe trigger` equivalent), so local testing requires a tunnel or hand-rolled simulator. |
-| Subscriptions | B− | Real recurring API (`/api/v1/subscriptions`) with clean lifecycle + webhooks. Docked because the integration distinction is easy to miss: `/api/intent` creates one-time checkout intents, `/api/v1/subscriptions` creates recurring checkout sessions, and DM-visible catalog plans require `/api/v1/plans` or `publishToDm: true`. |
-| Usage-based billing | C | Server API is simple, but the payer onboarding half of the flow is missing from docs. No vault status `GET`, no documented deposit URL. |
-| Observability | C+ | No documented `GET /api/intent/:id` to poll payment state — you are webhook-or-nothing. Aged-PENDING alerting is left to you. |
+## Resolved since July
 
-**Overall: B.** The one-time payment path is genuinely pleasant — arguably easier than Stripe for the happy path (one endpoint, no SDK, no client library version churn, 1% flat fee). Recurring subscriptions are real and well-shaped. It loses ground on **integration clarity**: one-time intents, subscription checkouts, and merchant catalog plans are separate product types, and the wrong endpoint can look successful while producing zero DM-visible plans. The metered-vault flow is also still half-documented on the customer-onboarding side.
+| July finding | Now |
+|---|---|
+| "Reconcile the subscription docs around `/api/intent`, `/api/v1/subscriptions`, `/api/v1/plans`, and `publishToDm`, with a clear when-to-use-which table" | Shipped. The endpoint-selection table is on the docs overview and in every agent surface, and it's test-enforced — the suite fails if any of the five billing models loses its row. |
+| "Document the customer vault deposit flow + add `GET /api/user/vault/status`" | Shipped 2026-07-10. The usage page documents the readiness read, the commit flow with a dashboard URL to send the customer to, the `commit-config` policy endpoint, and both denial cases. |
+| "Add `GET /api/intent/:id` for polling" | Shipped 2026-07-10, with the legacy `?id=` query form still supported. |
+| "Add a dashboard/CLI send-test-webhook trigger" | Shipped 2026-07-18. `POST /api/webhooks/test` sends a signed sample, `POST /api/webhooks/events/replay` resends a stored event, and `npx @subscriptonarc/cli trigger` covers local loops. Sandbox test clocks simulate renewals without waiting a month. |
+| "Publish a complete OpenAPI spec and `llms.txt`" | Both already existed: `llms.txt` since 2026-05-27, `/openapi.json` since 2026-06-25. See the note below. |
 
-## Grade: AI agent developers — **B+**
+## What held up
 
-| Area | Grade | Notes |
-|---|---|---|
-| REST-only, no SDK | A | Perfect for agents: plain `fetch`, no package installs, no SDK version drift. Everything fits in one context window. |
-| Docs precision | A− | Exact endpoint paths, exact regex for the signature header, exact payload shapes, explicit "critical rules" (raw body before parse, atomic event claim). An agent can implement this correctly first-try — this repo did. |
-| Self-verifiability | C | An agent **cannot close the loop alone**: no sandbox "trigger webhook" API, no intent status `GET` to poll, and receiving real webhooks needs a human to set up a tunnel + dashboard webhook registration. Kris's Script had to build its own signed-webhook simulator to test end-to-end. |
-| Machine-readability | C+ | No OpenAPI spec, no `llms.txt` found. Field tables are prose-parsed. |
-| Undocumented gaps | C | Where docs are silent (vault deposits, commit-config fields), an agent must guess or stop; a human can email support. |
+The qualitative read was accurate and still is:
 
-**Overall: B+.** Where SubScript is documented, it may be one of the most agent-friendly payment APIs around — the docs read like they were written for LLMs (single page, exact regexes, copy-paste crypto code). The score drops on self-verifiability: agents need a way to trigger sandbox events and poll payment status without human dashboard work.
+- The one-time path is genuinely pleasant. One endpoint, no SDK, no client-library churn, integer
+  micro-USDC amounts that sidestep float bugs, idempotency keys that replay correctly.
+- REST-only suits agents. Plain `fetch`, no installs, and the whole integration fits in one context
+  window.
+- Docs precision is the strength. Exact endpoint paths, the exact signature-header regex, raw body
+  before parse, atomic event claim. An agent can implement it correctly first try, and this repo did.
+- Recurring subscriptions are real and well-shaped, with a clean `incomplete → active → canceled`
+  lifecycle and matching webhooks.
 
-## What SubScript should fix
+The B+ on docs quality was fair for the prose then and the prose has only grown: the guide is now 17
+routed sections, each with a plain-Markdown twin, plus the whole guide as one file at `/docs.txt`.
 
-1. Reconcile the subscription docs around `/api/intent`, `/api/v1/subscriptions`, `/api/v1/plans`, and `publishToDm`, with a clear "when to use which" table.
-2. Document the customer vault deposit flow + add `GET /api/user/vault/status`.
-3. Add `GET /api/intent/:id` (and `GET /api/v1/subscriptions/:id`) for polling.
-4. Add a dashboard/CLI "send test webhook" button (incl. subscription.renewed).
-5. Publish a complete OpenAPI spec and `llms.txt`.
+## Where this file was wrong, and why it matters
+
+The "Machine-readability C+ — no OpenAPI spec, no `llms.txt` found" row was **wrong on the day it was
+written.** Both surfaces were live: `llms.txt` shipped two months earlier, the OpenAPI route one
+month earlier. The grade was built on an absence that wasn't there.
+
+That's worth recording because the same mistake happened again, in the other direction, on
+2026-08-19: a re-audit of these docs reported nine capabilities as undocumented and eight of the nine
+were documented all along. Two causes, both cheap to avoid:
+
+- **The docs are 17 routes, not one page.** Searching `/docs/developer` and concluding a fact is
+  absent from "the docs" measures one seventeenth of them.
+- **Path notation varies by surface.** The same endpoint is written `:id` in the docs pages, `{id}`
+  in OpenAPI, and `[id]` in the agent files. Grep for one form and the other two read as missing.
+
+So: absence is the hardest thing to establish by reading, and the easiest to get wrong confidently.
+Anything stated as missing here should be checked against the routes on disk, not the rendered page,
+and preferably turned into a failing assertion instead of a sentence in a report card.

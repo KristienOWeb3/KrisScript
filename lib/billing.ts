@@ -108,6 +108,25 @@ export async function handleSubscriptionEvent(
   const now = Math.floor(Date.now() / 1000);
   const thirtyDays = 30 * 86400;
 
+  /* Anchor expiry to the subscription's own billing period rather than to when
+     we happen to process the event. `now + 30d` over-grants on any delayed
+     handling: reconciling a subscription created 25 days ago would hand out a
+     further full month. SubScript omits currentPeriodEnd from its API, but it
+     does return createdAt and intervalSeconds, so the end of the period the
+     subscription is currently in can be derived — which is evidently how their
+     own "hours remaining" figure is produced. Falls back to now + interval when
+     a webhook carries neither field. */
+  const intervalSeconds =
+    Number(data.interval_seconds ?? data.intervalSeconds) > 0
+      ? Number(data.interval_seconds ?? data.intervalSeconds)
+      : thirtyDays;
+  const createdRaw = data.created_at ?? data.createdAt;
+  const createdSec = createdRaw ? Math.floor(new Date(createdRaw).getTime() / 1000) : NaN;
+  const periodEnd =
+    Number.isFinite(createdSec) && createdSec > 0
+      ? createdSec + (Math.floor(Math.max(0, now - createdSec) / intervalSeconds) + 1) * intervalSeconds
+      : now + intervalSeconds;
+
   if (type === "subscription.created" || type === "subscription.renewed" || type === "subscription.active") {
     await q(
       `UPDATE users SET 
@@ -117,7 +136,7 @@ export async function handleSubscriptionEvent(
          sub_status = 'active', 
          sub_cancel_at_period_end = 0 
        WHERE id = $4`,
-      [planName, now + thirtyDays, subId, userId]
+      [planName, periodEnd, subId, userId]
     );
     /* Settle the originating payment row too. This function only ever touched
        users, so a subscription could be fully active while its payment stayed
@@ -195,6 +214,9 @@ export async function reconcilePendingPayments(
         status: "active",
         external_reference: `${payment.product}:${payment.user_id}:${payment.id}`,
         amount_usdc_micros: payment.amount_micros,
+        // Let expiry be anchored to the real billing period, not to now.
+        created_at: subscription.createdAt ?? subscription.created_at,
+        interval_seconds: subscription.intervalSeconds ?? subscription.interval_seconds,
       });
       if (result.ok) fulfilled.push(payment.id);
       continue;
