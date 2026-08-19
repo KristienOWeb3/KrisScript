@@ -10,6 +10,20 @@ import MessageActions from "../components/MessageActions";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
+
+/** messages.billed holds "free", "payg", or a plan id. */
+const PLAN_LABELS: Record<string, string> = {
+  pro: "Pro",
+  promax: "Pro Max",
+  ultra: "Ultra",
+};
+
+function billLabel(billed: string): string {
+  if (billed === "free") return "free message";
+  if (billed === "payg") return "billed $0.10 (pay-as-you-chat)";
+  const name = PLAN_LABELS[billed];
+  return name ? `included in ${name}` : billed;
+}
 type RecentThread = { threadId: string; title: string; createdAt: number };
 
 export default function ChatPage() {
@@ -202,9 +216,16 @@ export default function ChatPage() {
   const loading = !me;
   const isPayg = !!user?.paygEnabled;
   const freeRemaining = Math.max(0, (user?.freeCap ?? 0) - (user?.freeUsed ?? 0));
-  const planLabel = isPayg
-    ? "Pay-As-You-Chat ($0.10/msg)"
-    : `Free Trial (${freeRemaining} left)`;
+  /* Precedence matches the chat gate: free trial first, then plan allowance,
+     then metered. Whichever will actually pay for the next message is shown. */
+  const planActive = !!user?.planActive;
+  const planLabel = freeRemaining > 0
+    ? `Free Trial (${freeRemaining} left)`
+    : planActive
+      ? `${user.planName} (${user.planRemaining} of ${user.planCap} left)`
+      : isPayg
+        ? "Pay-As-You-Chat ($0.10/msg)"
+        : "No messages left";
   const badgeClass = isPayg ? "pro" : "free";
   const userName = user?.displayName || user?.email?.split("@")[0] || "";
   const userInitials = userName.charAt(0).toUpperCase();
@@ -574,11 +595,7 @@ export default function ChatPage() {
                   <div key={i} className="msg user">
                     <div className="msg-bubble">{renderMessageContent(m.content)}</div>
                     {m.billed && (
-                      <span className="bill-tag">
-                        {m.billed === "free"
-                          ? "free message"
-                          : "billed $0.10 (pay-as-you-chat)"}
-                      </span>
+                      <span className="bill-tag">{billLabel(m.billed)}</span>
                     )}
                   </div>
                 );

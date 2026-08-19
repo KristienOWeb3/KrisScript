@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { one } from "./db";
+import type { PlanId } from "./plans";
 
 const SECRET = process.env.AUTH_SECRET || "kris-script-dev-secret";
 const SESSION_TTL = 365 * 86400;
@@ -10,7 +11,9 @@ export type User = {
   email: string;
   password_hash: string;
   activated: number;
-  plan: "free" | "payg";
+  /* "free" and "payg" predate the subscription tiers; the column is plain TEXT
+     and holds a PlanId once a plan is granted. */
+  plan: "free" | "payg" | PlanId;
   plan_expires_at: number | null;
   payg_enabled: number;
   wallet_address: string | null;

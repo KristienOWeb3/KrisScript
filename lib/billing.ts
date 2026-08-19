@@ -1,5 +1,6 @@
 import { q, one } from "./db";
 import { getIntent, intentIsPaid } from "./subscript";
+import { PLAN_ORDER, getPlan, planIsActive, planPeriodStart } from "./plans";
 
 export type Payment = {
   id: string;
@@ -180,4 +181,64 @@ export async function reconcilePendingPayments(
   }
 
   return { checked: pending.length, fulfilled, mismatched };
+}
+
+/**
+ * Where a user stands against their plan allowance this billing month.
+ *
+ * Single source of truth so the chat gate and /api/me cannot drift: both the
+ * decision to bill against the plan and the number shown to the user come from
+ * here. Usage counts messages billed under ANY plan tier within the current
+ * period, not just the current tier, so upgrading mid-month keeps the usage
+ * already spent rather than handing out a fresh allowance.
+ */
+export async function planQuota(user: {
+  id: number;
+  plan?: string | null;
+  plan_expires_at?: number | null;
+}): Promise<{
+  planId: string | null;
+  planName: string | null;
+  active: boolean;
+  cap: number;
+  used: number;
+  remaining: number;
+  periodStart: number;
+  expiresAt: number | null;
+}> {
+  const plan = getPlan(user.plan);
+  const active = planIsActive(user.plan, user.plan_expires_at);
+
+  if (!plan || !active) {
+    return {
+      planId: plan?.id ?? null,
+      planName: plan?.name ?? null,
+      active: false,
+      cap: 0,
+      used: 0,
+      remaining: 0,
+      periodStart: 0,
+      expiresAt: user.plan_expires_at ?? null,
+    };
+  }
+
+  const periodStart = planPeriodStart(user.plan_expires_at);
+  const row = await one<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM messages
+      WHERE user_id = $1 AND role = 'user'
+        AND billed = ANY($2) AND created_at >= $3`,
+    [user.id, PLAN_ORDER, periodStart]
+  );
+  const used = row?.c ?? 0;
+
+  return {
+    planId: plan.id,
+    planName: plan.name,
+    active: true,
+    cap: plan.messages,
+    used,
+    remaining: Math.max(0, plan.messages - used),
+    periodStart,
+    expiresAt: user.plan_expires_at ?? null,
+  };
 }

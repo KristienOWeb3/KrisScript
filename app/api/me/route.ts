@@ -8,6 +8,7 @@ import {
   microsToUsdc,
 } from "@/lib/plans";
 import { resolveDisplayName } from "@/lib/displayName";
+import { planQuota } from "@/lib/billing";
 
 export async function GET() {
   const user = await currentUser();
@@ -32,11 +33,22 @@ export async function GET() {
     BigInt(paygRow?.c ?? 0) * BigInt(PAYG_PRICE_USDC_MICROS)
   );
 
+  // Same helper the chat gate uses, so the number shown always matches the
+  // number enforced.
+  const quota = await planQuota(user);
+
   return Response.json({
     user: {
       email: user.email,
       activated: true,
-      plan: user.payg_enabled ? "payg" : "free",
+      plan: quota.active ? quota.planId : user.payg_enabled ? "payg" : "free",
+      planName: quota.planName,
+      planActive: quota.active,
+      planCap: quota.cap,
+      planUsed: quota.used,
+      planRemaining: quota.remaining,
+      planExpiresAt: quota.expiresAt,
+      subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
       freeUsed: freeRow?.c ?? 0,
       freeCap: FREE_MESSAGE_CAP,
       paygEnabled: !!user.payg_enabled,

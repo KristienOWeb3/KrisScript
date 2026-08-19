@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { q, one } from "@/lib/db";
+import { planQuota } from "@/lib/billing";
 import { currentUser } from "@/lib/auth";
 import { chatCompletion } from "@/lib/deepseek";
 import { hasRealKey, reportUsage } from "@/lib/subscript";
@@ -10,6 +11,7 @@ import {
   DEV_VAULT_COMMIT_USDC,
   usdcToMicros,
   microsToUsdc,
+  PLANS,
 } from "@/lib/plans";
 
 export async function GET(req: Request) {
@@ -69,7 +71,9 @@ export async function POST(req: Request) {
   }
 
   const activeThread = threadId || "main";
-  let billed: "payg" | "free";
+  /* Plan tiers are recorded under their own id so planQuota() can count a
+     billing period's usage, and so a receipt says which tier paid for it. */
+  let billed: "payg" | "free" | keyof typeof PLANS;
   let nextDevPaygAccrued: string | null = null;
 
   const freeUsed = await one<{ c: number }>(
@@ -77,8 +81,13 @@ export async function POST(req: Request) {
     [user.id]
   );
 
+  const quota = await planQuota(user);
+
   if ((freeUsed?.c ?? 0) < FREE_MESSAGE_CAP) {
     billed = "free";
+  } else if (quota.active && quota.remaining > 0) {
+    // Covered by this month's plan allowance; no per-message charge.
+    billed = quota.planId as keyof typeof PLANS;
   } else if (user.payg_enabled && user.wallet_address) {
     if (!hasRealKey()) {
       const priceMicros = BigInt(PAYG_PRICE_USDC_MICROS);
@@ -100,8 +109,13 @@ export async function POST(req: Request) {
   } else {
     return Response.json(
       {
-        error: `You have used your ${FREE_MESSAGE_CAP} free trial messages. Enable SubScript Pay-As-You-Go ($${PAYG_PRICE_USDC}/msg) to continue.`,
-        reason: "payg_required",
+        error: quota.active
+          ? `You have used all ${quota.cap} ${quota.planName} messages for this billing month. Upgrade your plan, enable pay-as-you-chat ($${PAYG_PRICE_USDC}/msg), or wait for your renewal.`
+          : `You have used your ${FREE_MESSAGE_CAP} free trial messages. Subscribe to a plan or enable SubScript Pay-As-You-Go ($${PAYG_PRICE_USDC}/msg) to continue.`,
+        reason: quota.active ? "plan_exhausted" : "payg_required",
+        ...(quota.active
+          ? { plan: quota.planId, planCap: quota.cap, planUsed: quota.used }
+          : {}),
       },
       { status: 402 }
     );

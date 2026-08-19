@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Icon from "../components/Icon";
+import { PLANS, PLAN_ORDER } from "@/lib/plans";
 
 type Transaction = {
   id: string;
@@ -79,6 +80,48 @@ export default function PricingPage() {
     }
   }
 
+  /** Start a monthly plan and hand off to SubScript checkout. */
+  async function subscribe(plan: string) {
+    setBusy(plan);
+    setError("");
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not start the subscription.");
+        setBusy("");
+        return;
+      }
+      window.location.href = data.checkoutUrl;
+    } catch {
+      setError("Network error. Please try again.");
+      setBusy("");
+    }
+  }
+
+  /** Cancel at period end — access continues until the plan expires. */
+  async function cancelPlan() {
+    setBusy("cancel");
+    setError("");
+    try {
+      const res = await fetch("/api/billing/cancel-subscription", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) setError(data.error || "Could not cancel the subscription.");
+      else {
+        showToast("Subscription cancelled. Access runs to the end of the period.");
+        await load();
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function setPayg(enabled: boolean) {
     setBusy("payg");
     setError("");
@@ -101,7 +144,11 @@ export default function PricingPage() {
   /* Same rule as /chat: nothing derived from `user` is rendered until
      /api/me answers, so no account briefly sees another's placeholder. */
   const loading = !me;
-  const userPlanLabel = user?.paygEnabled ? "Pay-As-You-Chat" : "Free Trial";
+  const userPlanLabel = user?.planActive
+    ? user.planName
+    : user?.paygEnabled
+      ? "Pay-As-You-Chat"
+      : "Free Trial";
   const displayName = user?.displayName || user?.email?.split("@")[0] || "";
 
   return (
@@ -370,6 +417,65 @@ export default function PricingPage() {
                   )}
                 </div>
               </div>
+
+              {/* MONTHLY SUBSCRIPTION TIERS */}
+              {PLAN_ORDER.map((id) => {
+                const tier = PLANS[id];
+                const isCurrent = user?.planActive && user?.plan === id;
+                return (
+                  <div
+                    key={id}
+                    className={`plan-card ui-card${isCurrent ? " active-plan-card" : ""}`}
+                  >
+                    <div className="plan-card-header">
+                      <div className="card-title-row">
+                        <h3>{tier.name}</h3>
+                        {isCurrent && <span className="badge payg">CURRENT</span>}
+                      </div>
+                      <div className="price">
+                        ${tier.priceUsdc} <small>/ month</small>
+                      </div>
+                    </div>
+                    <ul className="plan-features">
+                      <li>{tier.messages} messages per month</li>
+                      <li>Allowance resets on renewal</li>
+                      <li>Cancel anytime — access runs to period end</li>
+                    </ul>
+
+                    {isCurrent ? (
+                      <div className="payg-action-wrap">
+                        <p className="payg-status">
+                          {user.planRemaining} of {user.planCap} left this month
+                          {user.subCancelAtPeriodEnd && " · cancels at period end"}
+                        </p>
+                        {user.subCancelAtPeriodEnd ? (
+                          <button className="btn secondary small" style={{ width: "100%" }} disabled>
+                            Cancels at period end
+                          </button>
+                        ) : (
+                          <button
+                            className="btn secondary small danger-btn"
+                            style={{ width: "100%" }}
+                            onClick={cancelPlan}
+                            disabled={busy !== ""}
+                          >
+                            {busy === "cancel" ? "Cancelling..." : "Cancel subscription"}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        className="btn small"
+                        style={{ width: "100%" }}
+                        onClick={() => subscribe(id)}
+                        disabled={busy !== ""}
+                      >
+                        {busy === id ? "Starting..." : `Subscribe · $${tier.priceUsdc}/mo`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
