@@ -273,6 +273,8 @@ export async function createSubscription(opts: {
   description?: string;
   amountUsdcMicros: string;
   interval: string;
+  /** A catalogue plan uuid, when the tier has been bootstrapped. */
+  planId?: string;
   subscriber?: string;
   publishToDm?: boolean;
   externalReference: string;
@@ -295,8 +297,13 @@ export async function createSubscription(opts: {
   const body: Record<string, unknown> = {
     title: opts.title,
     description: opts.description,
-    amountUsdcMicros: opts.amountUsdcMicros,
-    interval: opts.interval,
+    /* A catalogue plan when the tier has one, otherwise the amount and interval
+       inline. The API takes either "a planId or an amount plus an interval";
+       subscribing by planId is what keeps every subscriber on the same published
+       tier rather than minting a fresh ad-hoc plan per checkout. */
+    ...(opts.planId
+      ? { planId: opts.planId }
+      : { amountUsdcMicros: opts.amountUsdcMicros, interval: opts.interval }),
     /* Sent explicitly in both directions, deliberately. Omitting this field
        does NOT mean "off": SubScript publishes unless it receives a literal
        false (`publishToDm !== false`), so silence would opt every deployment
@@ -323,15 +330,25 @@ export async function createSubscription(opts: {
        so a user without a wallet address produced events with no reference at
        all and fulfillment leaned entirely on the id recorded at creation. */
     externalReference: opts.externalReference,
-    /* Omitted rather than sent empty when the account has no address on file:
-       the API rejects anything that is not a 0x address here with "invalid
-       subscriber address". Sending it is also what makes SubScript write the DM
-       subscription offer, so its absence is the difference between a catalogue
-       plan with a DM and one with an empty thread. */
-    ...(opts.subscriber ? { subscriber: opts.subscriber } : {}),
+    /* Required, not optional, whenever externalReference or merchantCustomerId
+       is sent — the API's own rule. We always send a reference, so omitting the
+       subscriber for an account with no address on file made the request 400
+       with "invalid subscriber address" and surfaced as a generic failure with
+       no hint about the cause. Callers now check for an address first and say
+       what to do about it; this throw is the backstop.
+
+       Sending it is also what makes SubScript write the DM subscription offer,
+       so its absence is the difference between a catalogue plan with a DM and
+       one with an empty thread. */
+    subscriber: opts.subscriber,
     idempotencyKey: opts.idempotencyKey,
     sandbox: !isLiveKey,
   };
+  if (!isWalletAddress(opts.subscriber)) {
+    throw new SubScriptError(
+      "A wallet address is required to start a subscription. Add one on the billing page first."
+    );
+  }
   if (appUrl().startsWith("https://")) {
     body.successUrl = `${appUrl()}/billing/success`;
     body.cancelUrl = `${appUrl()}/billing/cancel`;
@@ -554,6 +571,171 @@ export async function getSubscription(
  */
 export function isWalletAddress(value: string | null | undefined): boolean {
   return typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+}
+
+/**
+ * The two addresses a payment event carries, normalised to lowercase or null.
+ *
+ * The exact spellings matter and were previously wrong. `payment.succeeded`
+ * names these `payer_address` (the wallet that signed and settled) and
+ * `beneficiary_address` (the registered account the merchant must fulfill, which
+ * differs from the payer only on a sponsored payment). The old code read
+ * `field(obj, "beneficiary")`, and since field() only bridges snake_case to
+ * camelCase it never looked for `beneficiary_address` at all — so the lookup
+ * matched nothing on every real delivery. Its fallback chain (`subscriber`,
+ * `subscriber_address`, `user_address`, `wallet_address`) matched nothing either:
+ * none of those appear on a payment event.
+ *
+ * `subscription.*` events carry `beneficiary_address` but no payer, so `payer`
+ * comes back null there.
+ */
+export function paymentParties(obj: any): {
+  payer: string | null;
+  beneficiary: string | null;
+} {
+  const read = (...names: string[]): string | null => {
+    const raw = field(obj, ...names);
+    return isWalletAddress(raw) ? String(raw).trim().toLowerCase() : null;
+  };
+  return {
+    payer: read("payer_address"),
+    beneficiary: read("beneficiary_address"),
+  };
+}
+
+/**
+ * Whether this event describes a payment made by someone other than the account
+ * being credited.
+ *
+ * `isSponsored` is documented in SubScript's prose guide but is absent from
+ * openapi.json, and sponsor workflows are flagged deployment-scoped — so it is
+ * read when present and never required. Two different addresses are the fact
+ * that actually establishes a third party, and `beneficiary_address` IS in the
+ * contract.
+ */
+export function isSponsoredPayment(obj: any): boolean {
+  if (field(obj, "is_sponsored") === true) return true;
+  const { payer, beneficiary } = paymentParties(obj);
+  return !!payer && !!beneficiary && payer !== beneficiary;
+}
+
+/**
+ * How long a sponsored payment buys, in seconds, when the event says so.
+ *
+ * Also undocumented in openapi.json, so callers fall back to their own period
+ * length rather than treating its absence as an error.
+ */
+export function sponsoredDurationSeconds(obj: any): number | null {
+  const raw = Number(field(obj, "duration_seconds"));
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : null;
+}
+
+export type MerchantPlan = {
+  id: string;
+  name: string;
+  amountUsdcMicros: string;
+  periodSeconds?: number;
+  subscribeUrl?: string;
+  active?: boolean;
+};
+
+/**
+ * Create a catalogue plan (POST /api/v1/plans).
+ *
+ * Publishing a plan is what puts a tier into the plan controls of every existing
+ * user DM with this merchant, which is the durable way to reach the DM picker —
+ * as opposed to letting each subscription checkout mint its own ad-hoc plan.
+ *
+ * There is deliberately no idempotencyKey parameter here because the endpoint
+ * does not accept one, and it does not deduplicate on `name` either: calling
+ * this twice creates two identical plans in the public catalogue. The caller is
+ * responsible for recording the returned id and never re-posting a tier it
+ * already has. Price and period are immutable afterwards.
+ */
+export async function createPlan(opts: {
+  name: string;
+  amountUsdcMicros: string;
+  periodDays: number;
+  description?: string;
+  detailsUrl?: string;
+}): Promise<{ devMode: boolean; plan: MerchantPlan }> {
+  if (!hasRealKey()) {
+    const id = `dev_plan_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    return {
+      devMode: true,
+      plan: {
+        id,
+        name: opts.name,
+        amountUsdcMicros: opts.amountUsdcMicros,
+        subscribeUrl: `${appUrl()}/dev/checkout?plan=${id}`,
+        active: true,
+      },
+    };
+  }
+
+  const res = await fetch(`${BASE}/api/v1/plans`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: opts.name,
+      amountUsdcMicros: opts.amountUsdcMicros,
+      periodDays: opts.periodDays,
+      ...(opts.description ? { description: opts.description } : {}),
+      ...(opts.detailsUrl ? { detailsUrl: opts.detailsUrl } : {}),
+    }),
+  });
+  const json = await res.json().catch(() => ({} as any));
+  const plan = json.plan ?? json.data ?? json;
+  if (!res.ok || !plan?.id) {
+    throw new SubScriptError(
+      json.message || json.error || `SubScript /api/v1/plans failed (HTTP ${res.status})`,
+      { code: json.code, requestId: json.request_id, status: res.status }
+    );
+  }
+  return {
+    devMode: false,
+    plan: {
+      id: String(plan.id),
+      name: plan.name,
+      amountUsdcMicros: String(field(plan, "amount_usdc_micros") ?? opts.amountUsdcMicros),
+      periodSeconds: Number(field(plan, "period_seconds")) || undefined,
+      subscribeUrl: field(plan, "subscribe_url") || undefined,
+      active: plan.active !== false,
+    },
+  };
+}
+
+/** List catalogue plans (GET /api/v1/plans). There is no single-plan read route. */
+export async function listPlans(
+  activeOnly = false
+): Promise<{ status: number; plans: MerchantPlan[] }> {
+  if (!hasRealKey()) return { status: 200, plans: [] };
+  const suffix = activeOnly ? "?active=true" : "";
+  try {
+    const res = await fetch(`${BASE}/api/v1/plans${suffix}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.SUBSCRIPT_SECRET_KEY}` },
+    });
+    const body = await res.json().catch(() => ({} as any));
+    if (!res.ok) return { status: res.status, plans: [] };
+    const list: any[] = body.data || body.plans || (Array.isArray(body) ? body : []);
+    return {
+      status: res.status,
+      plans: (Array.isArray(list) ? list : []).map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        amountUsdcMicros: String(field(p, "amount_usdc_micros") ?? ""),
+        periodSeconds: Number(field(p, "period_seconds")) || undefined,
+        subscribeUrl: field(p, "subscribe_url") || undefined,
+        active: p.active !== false,
+      })),
+    };
+  } catch {
+    return { status: 0, plans: [] };
+  }
 }
 
 /**

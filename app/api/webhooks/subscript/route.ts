@@ -85,7 +85,15 @@ export async function POST(req: Request) {
         payload
       );
       if (!result.ok) {
-        console.warn("[webhook] payment.succeeded for unknown payment", payload);
+        /* Name the reason. `beneficiary_not_registered` in particular is not a
+           malformed delivery — it is a real gift paid for an address no account
+           here has on file, and the fix is on our side, not the sender's. */
+        console.warn(
+          `[webhook] payment.succeeded not applied (${result.reason ?? "unknown"})`,
+          payload
+        );
+      } else if (result.gifted) {
+        console.log("[webhook] payment.succeeded credited as a gift (one period, no renewal)");
       }
     } else if (event.type === "payment.failed") {
       /* Recorded so the charge stops looking like one still in flight.

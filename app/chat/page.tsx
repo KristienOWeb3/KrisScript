@@ -241,6 +241,10 @@ export default function ChatPage() {
           ? "$0.10/msg"
           : "0 left";
   const cancelsAtPeriodEnd = planActive && !!user?.subCancelAtPeriodEnd;
+  /* A gifted period ends rather than renews, so it reads as "ends" here too —
+     but the wording has to say why, because the subscriber never set it up and
+     has no authorization to manage. */
+  const isGifted = planActive && !!user?.planGifted;
   const planLabel = `${tier.label} · ${allowanceShort}`;
   const userName = user?.displayName || user?.email?.split("@")[0] || "";
   const userInitials = userName.charAt(0).toUpperCase();
@@ -260,15 +264,16 @@ export default function ChatPage() {
         <span className={`badge ${tier.id}`}>{tier.label}</span>
         <span className="plan-status-meta">
           {allowanceLabel}
-          {cancelsAtPeriodEnd && " · ends at period end"}
+          {isGifted ? " · gifted, ends at period end" : cancelsAtPeriodEnd && " · ends at period end"}
         </span>
       </div>
+      {user?.giftNotice && <div className="plan-alert-note">{user.giftNotice}</div>}
       {user?.subAlertMessage && (
         <div className="plan-alert-note">{user.subAlertMessage}</div>
       )}
       <a className="dropdown-item" href="/pricing">
         <Icon name="zap" size={14} />
-        <span>{tier.paid ? "Manage plan" : "Plans & Pay-As-You-Chat"}</span>
+        <span>{isGifted ? "Subscribe to keep it" : tier.paid ? "Manage plan" : "Plans & Pay-As-You-Chat"}</span>
       </a>
     </div>
   );

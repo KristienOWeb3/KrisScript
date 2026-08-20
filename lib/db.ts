@@ -57,6 +57,15 @@ UPDATE users
 -- pending_display_name until the $1 USDC payment is fulfilled.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_display_name TEXT;
+-- The current period was paid for by somebody else. A gift settles as a ONE-TIME
+-- payment: it buys one duration and leaves no standing authorization behind, so
+-- unlike a normal subscription it will not renew and access simply stops. Held
+-- separately from sub_status/sub_alert because the subscriber needs to be told
+-- this for the whole gifted period, whereas an alert is cleared on the next
+-- lifecycle event. Cleared when the account starts a subscription of its own.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_gifted INTEGER NOT NULL DEFAULT 0;
+-- The wallet that paid for it, for the ledger and so the notice can name a payer.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_gifted_by TEXT;
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id INTEGER NOT NULL,
@@ -75,6 +84,33 @@ CREATE TABLE IF NOT EXISTS payments (
   intent_id TEXT,
   receipt_token TEXT,
   status TEXT NOT NULL DEFAULT 'PENDING',
+  payer_address TEXT,
+  beneficiary_address TEXT,
+  is_sponsored INTEGER NOT NULL DEFAULT 0,
+  supersedes_subscription_id TEXT,
+  created_at INTEGER NOT NULL DEFAULT (floor(extract(epoch from now()))::integer)
+);
+-- Who signed the charge vs whose account it entitles. payment.succeeded carries
+-- both (payer_address / beneficiary_address) and they differ on a sponsored
+-- payment, so they cannot share a column: writing the payer onto the
+-- beneficiary's account would send every later DM offer to the wrong person.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_address TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS beneficiary_address TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS is_sponsored INTEGER NOT NULL DEFAULT 0;
+-- The subscription this one replaces, on a tier change. SubScript models an
+-- upgrade as a NEW subscription rather than an edit, and two active records for
+-- one subscriber are two chargeable authorizations — so the outgoing id is
+-- parked here at checkout and cancelled once the replacement reaches active.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS supersedes_subscription_id TEXT;
+-- SubScript catalogue plans, one row per local tier. POST /api/v1/plans takes no
+-- idempotency key and does not deduplicate on name, so a re-run would litter the
+-- public catalogue (and the DM plan picker) with duplicate tiers. The returned
+-- uuid is recorded here and that is what makes the bootstrap idempotent.
+CREATE TABLE IF NOT EXISTS merchant_plans (
+  tier TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL,
+  subscribe_url TEXT,
+  amount_micros TEXT NOT NULL,
   created_at INTEGER NOT NULL DEFAULT (floor(extract(epoch from now()))::integer)
 );
 CREATE TABLE IF NOT EXISTS webhook_events (

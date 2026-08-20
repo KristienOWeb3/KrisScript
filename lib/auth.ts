@@ -29,6 +29,11 @@ export type User = {
   /** Standing lifecycle advisory, e.g. 'allowance_low'. Null when all is well. */
   sub_alert: string | null;
   sub_cancel_at_period_end: number;
+  /** 1 when the current period was paid for by another account — a one-time
+   *  gift with no standing authorization, so it will not renew. */
+  plan_gifted: number;
+  /** The wallet that paid for a gifted period. */
+  plan_gifted_by: string | null;
   display_name: string | null;
   pending_display_name: string | null;
   created_at: number;

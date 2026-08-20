@@ -34,8 +34,9 @@ npm run dev                  # http://localhost:3000
 | `SUBSCRIPT_SECRET_KEY` | SubScript API key (`sk_test_` sandbox / `sk_live_` production). Blank = dev mode. |
 | `SUBSCRIPT_WEBHOOK_SECRET` | Verifies `x-subscript-signature` on webhooks. |
 | `DEEPSEEK_API_KEY` | Real AI replies from [platform.deepseek.com](https://platform.deepseek.com). |
-| `APP_URL` | Public URL. Must be **HTTPS** for SubScript success/cancel redirects — use a tunnel in dev. |
+| `APP_URL` | Public URL. Must be **HTTPS** for SubScript success/cancel redirects and for webhooks to reach you at all — use a tunnel in dev. |
 | `AUTH_SECRET` | Signs session cookies. Set a long random string. |
+| `ADMIN_RESET_SECRET` | Guards `/api/admin/reset` and `/api/admin/bootstrap-plans`. Unset disables both. Required for `npm run plans:bootstrap`. |
 
 ## Going live against real SubScript (sandbox)
 
@@ -65,21 +66,70 @@ The script signs the payload exactly per SubScript's documented scheme (`t=<unix
 - Webhook events are stored with processing state and marked processed only after fulfillment succeeds, so replays are acknowledged and transient failures can retry safely; payments are also idempotent at the row level.
 - Billing precedence per message: **active monthly plan → pay-as-you-chat → free cap (3)**.
 - Pro = 10 messages/month, Pro Max = 25, Ultra = 50. Switching tiers starts a fresh period; renewing is SubScript's job.
-- The tiers are **real recurring subscriptions** via `POST /api/v1/subscriptions` with `interval: "monthly"`, an `externalReference` of `user:<id>:plan:<tier>`, and a `subscriber` when the account has a `0x` address on file. The $1 activation and the $1 name change stay one-time checkout intents. See [GRADING.md](GRADING.md).
-- **Plan catalogue / DM publication** is off unless `SUBSCRIPT_PUBLISH_TO_DM=1`. Omitting `publishToDm` is not the same as disabling it — SubScript publishes unless it receives a literal `false` — and publishing has two steps: the catalogue plan needs `publishToDm`, while the **DM offer additionally needs `subscriber`**, so an account with only a vault commit id gets a plan in the picker and an empty thread. A test key can publish (the premium requirement is waived for test mode), but a published plan carries no environment, so on mainnet a test-key plan is listed alongside live ones.
+- The tiers are **real recurring subscriptions** via `POST /api/v1/subscriptions` with `interval: "monthly"`, an `externalReference` of `user:<id>`, and a **required** `subscriber` address. The $1 activation and the $1 name change stay one-time checkout intents. See [GRADING.md](GRADING.md).
+- `subscriber` is mandatory, not optional: SubScript requires it whenever an `externalReference` or `merchantCustomerId` is sent, and we always send a reference. Without a `0x` address the request 400s, so `/api/billing/checkout` refuses up front and says which field to fill. It is also what makes the DM offer get written.
+- **The customer reference carries no tier.** A tier change mints a *new* subscription id but keeps the same customer id, so a reference like `user:<id>:plan:pro` would change identity on every upgrade — which is the one thing the reference exists to prevent. The tier is recovered from the charged amount instead (the three prices are distinct). The older per-tier form is still parsed, since live subscriptions carry it.
+- **Plan catalogue / DM publication** is off unless `SUBSCRIPT_PUBLISH_TO_DM=1`. Omitting `publishToDm` is not the same as disabling it — SubScript publishes unless it receives a literal `false`. Run `npm run plans:bootstrap` once to publish the three tiers as catalogue plans; checkouts then subscribe by `planId`. Without that, every checkout mints its own ad-hoc plan and the DM picker fills with duplicates. A test key can publish (the premium requirement is waived for test mode), but a published plan carries no environment, so on mainnet a test-key plan is listed alongside live ones.
 - `users.wallet_address` holds **only** `0x` addresses; vault commit ids live in `users.commit_id`. They shared a column until the split, which is why subscriptions had no address to bind to.
-- Subscription events handled: `activated`, `updated`, `renewed`, `reactivated`, `cancel_scheduled`, `canceled`, `payment_failed`, `renewal_upcoming`, `trial_ending`, `allowance_low`. **A resume mints a new `subscription_id`** and names the old one in `previous_subscription_id`, so entitlements are keyed on our own `externalReference` (returned as `merchant_customer_id`) and never on the subscription id. Nothing is charged at a resume, so it restores status without extending the period.
+- Subscription events handled: `activated`, `updated`, `renewed`, `reactivated`, `cancel_scheduled`, `canceled`, `payment_failed`, `renewal_upcoming`, `trial_ending`, `allowance_low`. **A resume mints a new `subscription_id`** and names the old one in `previous_subscription_id`, so entitlements are keyed on our own `externalReference` (returned as `merchant_customer_id`) and never on the subscription id.
+- **A resume is charged, not free.** SubScript documents no free revival — the only resubscribe primitive it exposes points at a new checkout at the regular price — and in practice the same amount is debited. `reactivated` therefore extends `plan_expires_at` to the period end the event states. It extends *only* to a stated end, which is safe in both directions: nothing stated means nothing moves. The previous code asserted the opposite and never extended, so a subscriber paid and received no additional access.
+- **Cancelling writes `sub_status = 'canceling'`, not `'canceled'`.** Access runs to period end, and the terminal value arrives from the event. Writing it locally made a winding-down subscription indistinguishable from a finished one — which, combined with `/api/billing/checkout` refusing the current tier while `planIsActive` was still true, made resubscribing impossible from the platform at all.
+
+### Upgrading a plan
+
+Entirely platform-initiated; there is no DM upgrade path. Click a higher tier on `/pricing` → `POST /api/billing/checkout` creates a **new** subscription and hands back SubScript's hosted `checkoutUrl` → pay there → `subscription.activated` grants the new tier → the subscription it replaced is cancelled.
+
+- **Order matters.** The old authorization is cancelled *after* the new one activates, never before, so an abandoned checkout cannot leave the subscriber with nothing.
+- Two active subscriptions for one subscriber are **two chargeable authorizations**, so failing to retire the old one double-bills — and its next renewal would drag the tier back down. The outgoing id is parked on `payments.supersedes_subscription_id` at checkout.
+- There is a fallback for a tier change we did not initiate (no payments row to carry the supersede): the id the account held before the event is retired when the tier actually changed. We don't expose that path, but it stops a DM-side tier change from billing twice.
+- **No proration.** SubScript documents none, so an upgrade charges the new tier's full price immediately and starts a fresh period. Unused days on the old tier are not credited.
+- **Upgrade-only while live**, per SubScript: "do not build or expose a downgrade action." Lower tiers are hidden on `/pricing` while a subscription is live. The way down is cancel, then subscribe to the lower tier — once it is winding down, every tier is offered again, because the next checkout starts a fresh authorization rather than editing one.
+
+### Gifted plans ("ask a friend to pay")
+
+A gift is detected, recorded, and **surfaced to the subscriber** — because a gifted account otherwise looks identical to a paying one right up to the moment it silently lapses.
+
+- Detection: `payment.succeeded` carries `payer_address` and `beneficiary_address`, and two different addresses mean a third party paid. `isSponsored` is read when present but never required — it appears in SubScript's prose guide and **not** in `openapi.json`, and sponsor workflows are flagged deployment-scoped.
+- **The only key is `beneficiary_address`.** `payment.succeeded` carries no `external_reference` or `merchant_customer_id` at all, and a gift has no payments row of ours to match, so the beneficiary is resolved via `users.wallet_address`. Sponsorship therefore only works for an account with a `0x` address on file. That is a genuine limitation, not an oversight.
+- A gift settles as a **one-time payment**: one duration, no standing authorization, so it will not renew. `users.plan_gifted` is set, `sub_status` becomes `gifted`, and `/api/me` returns a `giftNotice` naming the payer and the end date. `/pricing` and `/chat` both show it, and the tier card offers *Subscribe* rather than *Cancel* — there is nothing to cancel.
+- Where the beneficiary already has a live subscription of their own, the gift is just extra time: the period extends and nothing is flagged, because nothing is going to stop.
+- Extending uses the event's `duration_seconds` when stated, from whichever is later of now and the current expiry — so a gift mid-period adds time instead of truncating it.
+- **The request side is not built.** `POST /api/user/requests/merchant-plan` sits under `/api/user/…` rather than the merchant `sk_` routes, so it is user-session-authed and not callable with our key; its response shape, idempotency, expiry and revocation are all undocumented. Subscribers ask from their own SubScript DM. `/pricing` offers each tier's `subscribeUrl` as a **Share with a friend** link, which is SubScript's own hosted checkout for that plan.
 - Deliveries are read from `data.object`, accepted in either snake_case or camelCase, and refused with a 400 when the event's `environment` disagrees with the configured key.
+
+### Demoing the subscription lifecycle
+
+Webhooks cannot reach `localhost`, so `APP_URL=http://localhost:3000` means **no deliveries at all** — and a gift has no pull path, since `reconcilePendingPayments` only polls payments rows we created. Start a tunnel first:
+
+```bash
+cloudflared tunnel --url http://localhost:3000   # put the HTTPS URL in APP_URL
+# register <url>/api/webhooks/subscript in the SubScript dashboard, then restart dev
+npm run plans:bootstrap    # publish the three tiers once (idempotent)
+npm run plans:check        # show local + upstream catalogue, publish nothing
+```
+
+Renewals without waiting a month, via sandbox test clocks:
+
+```bash
+npm run clock create
+npm run clock add <clockId>
+npm run clock advance <clockId> 31
+```
+
+Test-clock subscriptions accept only a name, amount, interval and `subscriberLabel` — **no `externalReference`** — so their renewals carry none of our identifiers and log as `user_not_found`. They prove signed deliveries arrive and verify. To extend a *real* account's period, use the dev simulator with the subscription's checkout id and `eventType: "subscription.renewed"`; its gift checkbox exercises the `payer_address` / `beneficiary_address` split.
 
 ## Project map
 
 ```
-app/api/billing/checkout   Create SubScript checkout intents ($1 / $2 / $5)
+app/api/billing/checkout   Create subscription checkouts + the plan catalogue (GET)
 app/api/billing/payg       Enable/disable pay-as-you-chat + wallet address
+app/api/admin/bootstrap-plans  Publish the three tiers as SubScript catalogue plans (idempotent)
 app/api/webhooks/subscript HMAC verification, atomic event claim, fulfillment
 app/api/chat               Message gating + DeepSeek + $0.10 usage reporting
 app/api/dev/complete       Dev-mode simulated checkout completion (404s in production)
 lib/subscript.ts           All SubScript API calls + signature verify/sign
-lib/billing.ts             Idempotent payment fulfillment
+lib/billing.ts             Idempotent payment fulfillment, subscription lifecycle, gifts
+scripts/bootstrap-plans.mjs   Publish/inspect the catalogue plans
+scripts/test-clock.mjs        Sandbox test clocks — renewals without waiting a month
 scripts/simulate-webhook.mjs  Local webhook replay tool
 ```

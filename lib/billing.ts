@@ -3,11 +3,14 @@ import {
   getIntent,
   intentIsPaid,
   getSubscription,
+  cancelSubscription,
   hasRealKey,
   eventObject,
   field,
   toEpochSeconds,
-  isWalletAddress,
+  paymentParties,
+  isSponsoredPayment,
+  sponsoredDurationSeconds,
 } from "./subscript";
 import {
   PLANS,
@@ -38,7 +41,7 @@ export async function fulfillPayment(
   intentId: string | undefined,
   merchantReference: string | undefined,
   eventData?: any
-): Promise<{ ok: boolean; already?: boolean; reason?: string }> {
+): Promise<{ ok: boolean; already?: boolean; gifted?: boolean; reason?: string }> {
   const obj = eventObject(eventData);
   let payment: Payment | undefined;
   if (intentId) {
@@ -51,21 +54,49 @@ export async function fulfillPayment(
       payment = await one<Payment>("SELECT * FROM payments WHERE id = $1", [paymentId]);
     }
   }
-  if (!payment) return { ok: false, reason: "payment_not_found" };
+  /* No row of ours matches. Before giving up, consider that this may be a
+     payment we never initiated: a sponsored one, where a friend paid for
+     somebody's plan straight from a DM. Those arrive with a beneficiary and no
+     reference of ours — payment.succeeded carries no external_reference at all —
+     so the only key available is the beneficiary's address. */
+  if (!payment) {
+    if (isSponsoredPayment(obj)) return fulfillSponsoredPayment(obj);
+    return { ok: false, reason: "payment_not_found" };
+  }
 
-  /* `beneficiary` is present only when the wallet receiving the service differs
-     from the wallet paying, and it is the one entitlement belongs to. Falling
-     back to the payer is correct when it is absent, which is the usual case.
+  const { payer, beneficiary } = paymentParties(obj);
 
-     Checked with isWalletAddress before storing: wallet_address is address-only
-     now that commit ids have their own column, and this writes a value straight
-     off the wire. */
-  const wallet =
-    field(obj, "beneficiary") ??
-    field(obj, "subscriber", "subscriber_address", "user_address", "wallet_address");
-  if (isWalletAddress(wallet)) {
+  /* Record both sides on the ledger row regardless of what happens next. Which
+     wallet signed is the difference between a refundable charge and an
+     unexplained one, and it is not recoverable later: the event is the only
+     place it appears. */
+  if (payer || beneficiary) {
+    await q(
+      `UPDATE payments
+          SET payer_address = COALESCE(payer_address, $1),
+              beneficiary_address = COALESCE(beneficiary_address, $2),
+              is_sponsored = CASE WHEN $3 THEN 1 ELSE is_sponsored END
+        WHERE id = $4`,
+      [payer, beneficiary, isSponsoredPayment(obj), payment.id]
+    );
+  }
+
+  /* Adopt an address onto the account only when nobody else is involved.
+
+     The rule is deliberately narrow. `beneficiary_address` names the account to
+     fulfill and `payer_address` the wallet that signed; when they differ, a third
+     party paid and NEITHER address reliably belongs to this account — so writing
+     either would be a guess. Getting it wrong is not cosmetic: wallet_address is
+     what later checkouts send as `subscriber`, so an absorbed stranger's address
+     routes every future DM offer to the wrong person.
+
+     COALESCE means an address already on file always wins, so this can only ever
+     fill a blank. */
+  const selfPaid = !payer || !beneficiary || payer === beneficiary;
+  const ownAddress = beneficiary ?? payer;
+  if (selfPaid && ownAddress) {
     await q("UPDATE users SET wallet_address = COALESCE(wallet_address, $1) WHERE id = $2", [
-      String(wallet).trim(),
+      ownAddress,
       payment.user_id,
     ]);
   }
@@ -101,6 +132,150 @@ export async function fulfillPayment(
   }
 
   return { ok: true };
+}
+
+/**
+ * Credit a payment somebody else made on a subscriber's behalf.
+ *
+ * This is the "ask a friend to pay" case. Nothing here was initiated by us, so
+ * there is no pending payments row to settle and none of our own identifiers are
+ * on the event — `payment.succeeded` carries no external_reference or
+ * merchant_customer_id at all. The single usable key is `beneficiary_address`,
+ * which means sponsorship can only ever resolve for an account that has a 0x
+ * address on file. That is a real limitation rather than an oversight: no other
+ * mapping is available.
+ *
+ * SubScript's instruction is to credit the beneficiary rather than the payer, and
+ * where the beneficiary already has access, to extend the existing window rather
+ * than reject the delivery or hand out a duplicate.
+ */
+export async function fulfillSponsoredPayment(
+  obj: any
+): Promise<{ ok: boolean; already?: boolean; gifted?: boolean; reason?: string }> {
+  const { payer, beneficiary } = paymentParties(obj);
+  if (!beneficiary) return { ok: false, reason: "no_beneficiary" };
+
+  const user = await one<{
+    id: number;
+    plan: string;
+    plan_expires_at: number | null;
+    subscription_id: string | null;
+    sub_status: string | null;
+  }>(
+    `SELECT id, plan, plan_expires_at, subscription_id, sub_status
+       FROM users WHERE lower(wallet_address) = $1`,
+    [beneficiary]
+  );
+  if (!user) return { ok: false, reason: "beneficiary_not_registered" };
+
+  /* Claim the charge before granting anything. The webhook route already makes a
+     repeat of the same event id a no-op, but the same money can arrive under two
+     event ids — payment.succeeded and its legacy payment.success alias — and a
+     second grant would silently double the window. The UNIQUE primary key
+     arbitrates. */
+  const intentId = String(
+    field(obj, "intent_id") ?? field(obj, "checkout_session_id") ?? ""
+  ).trim();
+  if (!intentId) return { ok: false, reason: "no_intent_id" };
+  const paymentId = `spon_${intentId}`.slice(0, 64);
+  const amountMicros = String(field(obj, "amount_usdc_micros") ?? "").trim();
+  const tier = tierFromEventAmount(obj);
+
+  const claim = await q(
+    `INSERT INTO payments
+       (id, user_id, product, amount_micros, intent_id, status,
+        payer_address, beneficiary_address, is_sponsored)
+     VALUES ($1, $2, $3, $4, $5, 'PAID', $6, $7, 1)
+     ON CONFLICT (id) DO NOTHING`,
+    [paymentId, user.id, tier ?? "sponsored", amountMicros, intentId, payer, beneficiary]
+  );
+  if (claim.rowCount === 0) return { ok: true, already: true };
+
+  await q("UPDATE users SET activated = 1 WHERE id = $1", [user.id]);
+
+  /* Extend from where access currently ends, not from now — otherwise a gift to
+     someone mid-period silently shortens what they already paid for. */
+  const now = Math.floor(Date.now() / 1000);
+  const duration = sponsoredDurationSeconds(obj) ?? PLAN_DURATION_SECONDS;
+  const active = planIsActive(user.plan, user.plan_expires_at);
+  const expiresAt = (active ? user.plan_expires_at! : now) + duration;
+
+  /* Never move someone down a tier on a gift. A Pro-priced gift to an Ultra
+     subscriber buys time, not a demotion, so the tier only changes when the
+     account has no live plan or the gift is for an equal or higher one. */
+  const currentRank = isPlanId(user.plan) ? PLAN_ORDER.indexOf(user.plan) : -1;
+  const giftRank = tier ? PLAN_ORDER.indexOf(tier) : -1;
+  const grantedPlan = active && currentRank > giftRank ? user.plan : (tier ?? user.plan);
+  if (!isPlanId(grantedPlan)) return { ok: false, reason: "plan_unknown" };
+
+  /* Whether a recurring authorization of the subscriber's own is still standing.
+     This decides what the gift actually means to them:
+
+      - With a live subscription, the gift is just extra time on top. Their own
+        subscription keeps renewing, so nothing about the account changes state
+        and there is nothing to warn them about.
+      - Without one, the gift IS their access. It settles as a one-time payment
+        with no standing authorization behind it, so it will not renew and the
+        plan stops when the duration runs out. That has to be visible, or the
+        account looks exactly like a paying subscriber until it silently lapses.
+
+     subscription_id is deliberately left alone either way — it is the handle
+     cancel needs, and clearing it would strand a real subscription. */
+  const liveSubscription =
+    !!user.subscription_id && ["active", "canceling"].includes(String(user.sub_status || ""));
+
+  await q(
+    `UPDATE users
+        SET plan = $1,
+            plan_expires_at = $2,
+            plan_gifted = $3,
+            plan_gifted_by = CASE WHEN $3 = 1 THEN $4 ELSE plan_gifted_by END,
+            sub_status = CASE WHEN $3 = 1 THEN 'gifted' ELSE sub_status END,
+            sub_cancel_at_period_end = CASE WHEN $3 = 1 THEN 1 ELSE sub_cancel_at_period_end END,
+            sub_alert = NULL
+      WHERE id = $5`,
+    [grantedPlan, expiresAt, liveSubscription ? 0 : 1, payer, user.id]
+  );
+
+  return { ok: true, gifted: !liveSubscription };
+}
+
+/**
+ * What to tell someone whose plan was paid for by another account.
+ *
+ * A gift is a one-time payment, not a subscription: it buys a single duration and
+ * leaves no standing authorization, so nothing renews and access ends on the
+ * date below. Saying so plainly matters — the account otherwise looks identical
+ * to a paying subscriber right up to the moment it silently stops.
+ *
+ * Kept next to the handler that sets the flag so the wording and the trigger
+ * cannot drift apart, the same way subAlertMessage is.
+ */
+export function giftNotice(user: {
+  plan_gifted?: number | null;
+  plan_gifted_by?: string | null;
+  plan_expires_at?: number | null;
+  plan?: string | null;
+}): string | null {
+  if (!user.plan_gifted) return null;
+  const tier = getPlan(user.plan);
+  const name = tier ? tier.name : "Your plan";
+  const ends = user.plan_expires_at
+    ? new Date(user.plan_expires_at * 1000).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+  const payer = user.plan_gifted_by
+    ? `${user.plan_gifted_by.slice(0, 6)}…${user.plan_gifted_by.slice(-4)}`
+    : "another account";
+
+  return (
+    `${name} was paid for by ${payer}. This was a one-time gift payment, not a subscription — ` +
+    `it will not renew${ends ? `, and access ends on ${ends}` : ""}. ` +
+    `Subscribe yourself before then to keep going without a gap.`
+  );
 }
 
 /**
@@ -185,11 +360,21 @@ async function resolveSubscriptionSubject(obj: any): Promise<{
   return {};
 }
 
-/** Parse the reference this app sends at creation, in either historical form. */
+/** Parse the reference this app sends at creation, in any historical form. */
 function parsePlanReference(
   reference: string
 ): { userId: number; planName?: PlanId } | undefined {
-  // "user:{id}:plan:{tier}" — what /api/billing/checkout sends.
+  /* "user:{id}" — the current form. Deliberately carries no tier: SubScript
+     models an upgrade as a new subscription that keeps the SAME customer id, so
+     a reference naming the tier changes identity every time someone moves up,
+     which is exactly what the reference exists to prevent. The tier is recovered
+     from the charged amount instead, via planToGrant(). */
+  const customer = reference.match(/^user:(\d+)$/i);
+  if (customer) {
+    const userId = Number(customer[1]);
+    if (userId > 0) return { userId };
+  }
+  // "user:{id}:plan:{tier}" — the previous form, still live on older subscriptions.
   const canonical = reference.match(/^user:(\d+):plan:([a-z]+)$/i);
   if (canonical) {
     const userId = Number(canonical[1]);
@@ -285,6 +470,86 @@ async function settleSubscriptionPayment(...ids: (string | undefined)[]): Promis
 }
 
 /**
+ * Cancel the subscription an upgrade replaced, once the replacement is live.
+ *
+ * SubScript models a tier change as a new subscription rather than an edit to the
+ * old one, and each subscription is an independent on-chain authorization — so
+ * two active records for one subscriber are two things that will charge. Nothing
+ * cancelled the old one, which meant an upgrade quietly doubled the bill and the
+ * stale subscription's next renewal would drag the tier back down to what it used
+ * to be.
+ *
+ * Deliberately runs after the grant, never before: cancelling first would leave
+ * the subscriber with nothing if the new checkout were abandoned.
+ *
+ * Two sources for the id to retire, in order:
+ *
+ *  1. `payments.supersedes_subscription_id`, parked at checkout. This is the
+ *     normal case — an upgrade started from our own pricing page.
+ *  2. The id the account held before this event, when the tier actually changed.
+ *     This is the safety net for a tier change we did not initiate, which has no
+ *     payments row to carry the supersede. We do not build or expose that path,
+ *     but a subscriber picking a higher tier straight from their DM plan picker
+ *     would otherwise end up paying for both.
+ */
+async function retireSupersededSubscription(
+  userId: number,
+  opts: {
+    activeIds: (string | null | undefined)[];
+    priorSubscriptionId: string | null;
+    tierChanged: boolean;
+  }
+): Promise<void> {
+  const active = opts.activeIds.filter(Boolean).map(String);
+
+  const recorded = active.length
+    ? await one<{ id: string; supersedes_subscription_id: string }>(
+        `SELECT id, supersedes_subscription_id FROM payments
+           WHERE intent_id = ANY($1) AND supersedes_subscription_id IS NOT NULL
+           LIMIT 1`,
+        [active]
+      )
+    : undefined;
+
+  const target =
+    recorded?.supersedes_subscription_id ??
+    (opts.tierChanged ? opts.priorSubscriptionId : null);
+
+  // Nothing to do, or the "old" id is the one that just activated.
+  if (!target || active.includes(target)) {
+    if (recorded) {
+      await q("UPDATE payments SET supersedes_subscription_id = NULL WHERE id = $1", [
+        recorded.id,
+      ]);
+    }
+    return;
+  }
+
+  const user = await one<{ wallet_address: string | null }>(
+    "SELECT wallet_address FROM users WHERE id = $1",
+    [userId]
+  );
+  try {
+    const res = await cancelSubscription(target, user?.wallet_address ?? undefined);
+    if (res.status >= 400) {
+      console.warn(
+        `[upgrade] could not cancel superseded subscription ${target} (HTTP ${res.status})`,
+        res.body
+      );
+    }
+  } catch (err) {
+    console.warn(`[upgrade] cancel of superseded subscription ${target} threw`, err);
+  }
+
+  /* Cleared whatever the outcome. A failed cancel is worth a log, but retrying it
+     on every later renewal event is not — and the merchant dashboard is the place
+     to settle a stuck authorization. */
+  if (recorded) {
+    await q("UPDATE payments SET supersedes_subscription_id = NULL WHERE id = $1", [recorded.id]);
+  }
+}
+
+/**
  * Apply a subscription lifecycle event.
  *
  * The event names here are the ones SubScript actually emits: activated,
@@ -313,6 +578,14 @@ export async function handleSubscriptionEvent(
   const subId = field(obj, "subscription_id") ?? null;
   const checkoutId = field(obj, "source_checkout_id", "checkout_id") ?? null;
 
+  /* What the account looked like before this event. Read up front because the
+     grant below repoints users.subscription_id, and the id being replaced is the
+     only handle on the authorization that has to stop charging. */
+  const prior = await one<{ subscription_id: string | null; plan: string }>(
+    "SELECT subscription_id, plan FROM users WHERE id = $1",
+    [userId]
+  );
+
   switch (kind) {
     /* ── Access begins or is extended ─────────────────────────────────── */
     case "activated":
@@ -330,7 +603,9 @@ export async function handleSubscriptionEvent(
                 sub_checkout_id = COALESCE($4::text, sub_checkout_id),
                 sub_status = 'active',
                 sub_cancel_at_period_end = 0,
-                sub_alert = NULL
+                sub_alert = NULL,
+                plan_gifted = 0,
+                plan_gifted_by = NULL
           WHERE id = $5`,
         [plan, subscriptionPeriodEnd(obj, now), subId, checkoutId, userId]
       );
@@ -339,29 +614,45 @@ export async function handleSubscriptionEvent(
          PENDING forever — and anything keyed off payment status, such as the
          return page, could never report it as confirmed. */
       await settleSubscriptionPayment(subId, checkoutId);
+      /* Now that the replacement is live, stop the one it replaced from
+         charging. No-op on a renewal and on a first subscription. */
+      await retireSupersededSubscription(userId, {
+        activeIds: [subId, checkoutId],
+        priorSubscriptionId: prior?.subscription_id ?? null,
+        tierChanged: !!prior && prior.plan !== plan,
+      });
       return { ok: true };
     }
 
-    /* ── Resumed inside the period already paid for ───────────────────── */
+    /* ── Resumed ──────────────────────────────────────────────────────── */
     case "reactivated": {
-      /* Nothing is charged at a resume. The subscriber keeps the access they
-         paid for and the next charge lands on the original period-end date, on
-         the original cadence — so plan_expires_at is deliberately left alone.
-         Extending it here would hand out a free period on every resume.
+      /* This branch used to leave plan_expires_at alone on purpose, reasoning
+         that a resume charges nothing and the subscriber simply keeps the period
+         they had already paid for. That is wrong. SubScript documents no free
+         revival — the only resubscribe primitive it exposes points at minting a
+         NEW checkout at the plan's regular price — and in practice the same
+         amount is debited on resume. So the old behaviour took the money and
+         extended nothing.
 
-         What has changed is the id: the on-chain authorization cannot be
-         revived once cancelled, so a resume mints a new one. The row is found
-         via the reference or previous_subscription_id, then repointed. */
+         The period end SubScript states is now authoritative. Extending only to
+         a stated end is what keeps this safe in both directions: it cannot
+         over-grant on a genuinely free resume (none is stated, nothing moves)
+         and it cannot under-grant on a charged one. */
+      const stated = statedPeriodEnd(obj);
       await q(
         `UPDATE users
-            SET subscription_id = COALESCE($1::text, subscription_id),
-                sub_checkout_id = COALESCE($2::text, sub_checkout_id),
+            SET plan_expires_at = COALESCE($1::integer, plan_expires_at),
+                subscription_id = COALESCE($2::text, subscription_id),
+                sub_checkout_id = COALESCE($3::text, sub_checkout_id),
                 sub_status = 'active',
                 sub_cancel_at_period_end = 0,
                 sub_alert = NULL
-          WHERE id = $3`,
-        [subId, checkoutId, userId]
+          WHERE id = $4`,
+        [stated, subId, checkoutId, userId]
       );
+      /* A resume that charged has a payments row behind it, same as any other
+         checkout, and it stays PENDING forever unless settled here. */
+      await settleSubscriptionPayment(subId, checkoutId);
       return { ok: true };
     }
 

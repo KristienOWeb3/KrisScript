@@ -27,9 +27,15 @@ export async function POST() {
 
   /* Mark cancel-at-period-end locally. Access deliberately runs to the end of
      the period already paid for — which is also the window in which the
-     subscriber can resume, arriving as subscription.reactivated. */
+     subscriber can resume, arriving as subscription.reactivated.
+
+     'canceling', not 'canceled': the authorization is scheduled to stop but the
+     subscription is still doing its job until the period ends. Writing the
+     terminal state here made a winding-down subscription indistinguishable from a
+     finished one, which is what left the UI with nothing to offer but a disabled
+     button. The terminal value now arrives from the event. */
   await q(
-    "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
+    "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceling' WHERE id = $1",
     [user.id]
   );
 

@@ -30,13 +30,19 @@ export async function POST() {
 
   /* Then our own reference. It is the only key that survives a resume — that
      mints a new subscription id — so this is what finds a customer who
-     cancelled and resumed while deliveries were failing. */
+     cancelled and resumed while deliveries were failing.
+
+     The current reference is the tier-independent `user:<id>`; the per-tier form
+     is still live on subscriptions created before the change, so both are tried. */
   if (!subscription) {
-    for (const tier of [user.plan, ...PLAN_ORDER]) {
-      if (!isPlanId(tier)) continue;
-      const { subscriptions } = await listSubscriptions({
-        externalReference: `user:${user.id}:plan:${tier}`,
-      });
+    const references = [
+      `user:${user.id}`,
+      ...[user.plan, ...PLAN_ORDER]
+        .filter(isPlanId)
+        .map((tier) => `user:${user.id}:plan:${tier}`),
+    ];
+    for (const externalReference of references) {
+      const { subscriptions } = await listSubscriptions({ externalReference });
       subscription =
         subscriptions.find(
           (s) => String(field(s, "status") ?? "").toLowerCase() === "active"

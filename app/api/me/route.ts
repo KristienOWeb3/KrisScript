@@ -8,7 +8,7 @@ import {
   microsToUsdc,
 } from "@/lib/plans";
 import { resolveDisplayName } from "@/lib/displayName";
-import { planQuota, subAlertMessage } from "@/lib/billing";
+import { planQuota, subAlertMessage, giftNotice } from "@/lib/billing";
 
 export async function GET() {
   const user = await currentUser();
@@ -50,6 +50,13 @@ export async function GET() {
       planExpiresAt: quota.expiresAt,
       subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
       subStatus: user.sub_status ?? null,
+      /* Whether this period was paid for by somebody else. A gift is a one-time
+         payment with no standing authorization behind it, so it will not renew —
+         the account looks exactly like a paying subscriber otherwise, right up
+         until it lapses, so both the flag and the wording are sent. */
+      planGifted: !!user.plan_gifted,
+      planGiftedBy: user.plan_gifted_by ?? null,
+      giftNotice: giftNotice(user),
       /* A standing advisory from the subscription lifecycle. allowance_low is
          the one that needs to reach the subscriber: the spending authorization
          is running out of cycles and only re-authorizing fixes it. */

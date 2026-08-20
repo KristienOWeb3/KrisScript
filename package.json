@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "simulate:webhook": "node scripts/simulate-webhook.mjs"
+    "simulate:webhook": "node scripts/simulate-webhook.mjs",
+    "plans:bootstrap": "node scripts/bootstrap-plans.mjs",
+    "plans:check": "node scripts/bootstrap-plans.mjs --check",
+    "clock": "node scripts/test-clock.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

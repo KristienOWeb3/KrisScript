@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Icon from "../components/Icon";
-import { PLANS, PLAN_ORDER, tierView } from "@/lib/plans";
+import { PLANS, PLAN_ORDER, tierView, isPlanId } from "@/lib/plans";
 
 type Transaction = {
   id: string;
@@ -28,11 +28,25 @@ export default function PricingPage() {
   const [commitInput, setCommitInput] = useState("");
   const [walletInput, setWalletInput] = useState("");
   const [copiedMerchant, setCopiedMerchant] = useState(false);
+  const [copiedShare, setCopiedShare] = useState("");
+  const [catalogue, setCatalogue] = useState<
+    Record<string, { planId: string | null; shareUrl: string | null }>
+  >({});
 
   function copyMerchantName() {
     navigator.clipboard.writeText("okechukwuanigba.sub");
     setCopiedMerchant(true);
     setTimeout(() => setCopiedMerchant(false), 2000);
+  }
+
+  /* SubScript's own hosted checkout for the plan. Anyone can pay it, and the
+     entitlement follows the beneficiary SubScript records — so this is the link a
+     subscriber sends when they want a friend to cover their plan. */
+  function copyShareLink(tierId: string, url: string) {
+    navigator.clipboard.writeText(url);
+    setCopiedShare(tierId);
+    showToast("Plan link copied. Whoever pays it, the plan lands on the account SubScript records as the beneficiary.");
+    setTimeout(() => setCopiedShare(""), 2500);
   }
 
   function showToast(msg: string) {
@@ -52,6 +66,17 @@ export default function PricingPage() {
       // Fetch transaction history
       const txRes = await fetch("/api/billing/transactions").then((r) => r.json());
       if (txRes.transactions) setTransactions(txRes.transactions);
+
+      /* The plan catalogue, which carries each tier's SubScript plan id and its
+         shareable checkout url once the bootstrap script has run. */
+      const catRes = await fetch("/api/billing/checkout").then((r) => r.json());
+      if (Array.isArray(catRes.plans)) {
+        setCatalogue(
+          Object.fromEntries(
+            catRes.plans.map((p: any) => [p.id, { planId: p.planId, shareUrl: p.shareUrl }])
+          )
+        );
+      }
     } catch {
       // Fallback
     }
@@ -94,6 +119,15 @@ export default function PricingPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Could not start the subscription.");
+        /* The wallet address is now required rather than optional — SubScript
+           makes `subscriber` mandatory alongside our reference, and it is what
+           makes the DM offer get written. Scroll the field into view instead of
+           leaving the message to be hunted for. */
+        if (data.needsWalletAddress) {
+          document
+            .querySelector<HTMLInputElement>('input[placeholder="0x..."]')
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
         setBusy("");
         return;
       }
@@ -178,6 +212,29 @@ export default function PricingPage() {
     ? `${user.planRemaining} of ${user.planCap} messages left this month`
     : null;
   const displayName = user?.displayName || user?.email?.split("@")[0] || "";
+
+  /* Whether the plan is going to stop rather than renew. A cancellation and a
+     gift both land here: the first has an authorization that has been told to
+     stop, the second never had one. Either way the period ends and the useful
+     action is to start a subscription, not to cancel something. */
+  const windingDown =
+    !!user?.subCancelAtPeriodEnd ||
+    !!user?.planGifted ||
+    ["canceling", "canceled", "cancelled", "expired", "past_due"].includes(
+      String(user?.subStatus || "").toLowerCase()
+    );
+  /* A live subscription is one that will charge again. Only then does the
+     upgrade-only rule apply, because only then is there an authorization to
+     supersede. */
+  const subscriptionLive = !!user?.planActive && !windingDown;
+  const currentRank =
+    user?.planActive && isPlanId(user.plan) ? PLAN_ORDER.indexOf(user.plan) : -1;
+  const expiryLabel = user?.planExpiresAt
+    ? new Date(user.planExpiresAt * 1000).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      })
+    : "period end";
 
   return (
     <div className="app-shell">
@@ -319,6 +376,12 @@ export default function PricingPage() {
                   <span> · Accrued Usage: <strong>${user.paygAccrued} USDC</strong></span>
                 )}
               </div>
+            </div>
+          )}
+          {user?.giftNotice && (
+            <div className="notice-box plan-alert-note">
+              <Icon name="gift" size={14} />
+              <span>{user.giftNotice}</span>
             </div>
           )}
           {user?.subAlertMessage && (
@@ -508,6 +571,18 @@ export default function PricingPage() {
               {PLAN_ORDER.map((id) => {
                 const tier = PLANS[id];
                 const isCurrent = user?.planActive && user?.plan === id;
+                const share = catalogue[id]?.shareUrl;
+
+                /* A downgrade is not offered while a subscription is live —
+                   SubScript's plan changes are upgrade-only. Once it is winding
+                   down, every tier is available again, because the next checkout
+                   starts a fresh authorization rather than editing one. */
+                if (subscriptionLive && currentRank >= 0 && PLAN_ORDER.indexOf(id) < currentRank) {
+                  return null;
+                }
+
+                const isUpgrade = subscriptionLive && currentRank >= 0 && !isCurrent;
+
                 return (
                   <div
                     key={id}
@@ -528,26 +603,48 @@ export default function PricingPage() {
                       <li>Cancel anytime — access runs to period end</li>
                     </ul>
 
-                    {isCurrent ? (
+                    {isCurrent && !windingDown ? (
                       <div className="payg-action-wrap">
                         <p className="payg-status">
                           {user.planRemaining} of {user.planCap} left this month
-                          {user.subCancelAtPeriodEnd && " · cancels at period end"}
                         </p>
-                        {user.subCancelAtPeriodEnd ? (
-                          <button className="btn secondary small" style={{ width: "100%" }} disabled>
-                            Cancels at period end
-                          </button>
-                        ) : (
-                          <button
-                            className="btn secondary small danger-btn"
-                            style={{ width: "100%" }}
-                            onClick={cancelPlan}
-                            disabled={busy !== ""}
-                          >
-                            {busy === "cancel" ? "Cancelling..." : "Cancel subscription"}
-                          </button>
-                        )}
+                        <button
+                          className="btn secondary small danger-btn"
+                          style={{ width: "100%" }}
+                          onClick={cancelPlan}
+                          disabled={busy !== ""}
+                        >
+                          {busy === "cancel" ? "Cancelling..." : "Cancel subscription"}
+                        </button>
+                      </div>
+                    ) : isCurrent ? (
+                      /* Winding down, or running on somebody else's payment.
+                         This used to be a disabled "Cancels at period end"
+                         button and nothing else, which left the subscriber with
+                         no way back — the checkout route also refused the current
+                         tier, so resubscribing was impossible from the platform
+                         entirely.
+
+                         A gift lands here too, and correctly: there is no
+                         authorization to cancel, only a window that ends, so the
+                         useful action is to start a real subscription. */
+                      <div className="payg-action-wrap">
+                        <p className="payg-status">
+                          {user.planGifted ? "Gifted · ends " : "Ends "}
+                          {expiryLabel} · {user.planRemaining} of {user.planCap} left
+                        </p>
+                        <button
+                          className="btn small"
+                          style={{ width: "100%" }}
+                          onClick={() => subscribe(id)}
+                          disabled={busy !== ""}
+                        >
+                          {busy === id
+                            ? "Starting..."
+                            : user.planGifted
+                              ? `Subscribe · $${tier.priceUsdc}/mo`
+                              : `Resubscribe · $${tier.priceUsdc}/mo`}
+                        </button>
                       </div>
                     ) : (
                       <button
@@ -556,7 +653,24 @@ export default function PricingPage() {
                         onClick={() => subscribe(id)}
                         disabled={busy !== ""}
                       >
-                        {busy === id ? "Starting..." : `Subscribe · $${tier.priceUsdc}/mo`}
+                        {busy === id
+                          ? "Starting..."
+                          : isUpgrade
+                            ? `Upgrade · $${tier.priceUsdc}/mo`
+                            : `Subscribe · $${tier.priceUsdc}/mo`}
+                      </button>
+                    )}
+
+                    {share && (
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        style={{ width: "100%", marginTop: 8 }}
+                        onClick={() => copyShareLink(id, share)}
+                        title="Copy this plan's SubScript checkout link"
+                      >
+                        <Icon name={copiedShare === id ? "check" : "gift"} size={13} />
+                        <span>{copiedShare === id ? "Link copied" : "Share with a friend"}</span>
                       </button>
                     )}
                   </div>

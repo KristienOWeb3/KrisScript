@@ -1,8 +1,16 @@
 import crypto from "crypto";
 import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { createSubscription, isWalletAddress, publishToDmEnabled, SubScriptError } from "@/lib/subscript";
-import { PLANS, PLAN_INTERVAL, isPlanId, planIsActive } from "@/lib/plans";
+import {
+  createSubscription,
+  isWalletAddress,
+  publishToDmEnabled,
+  SubScriptError,
+} from "@/lib/subscript";
+import { PLANS, PLAN_ORDER, PLAN_INTERVAL, isPlanId, planIsActive } from "@/lib/plans";
+
+/** Statuses that mean the current subscription is winding down or already over. */
+const WINDING_DOWN = new Set(["canceling", "canceled", "cancelled", "expired", "past_due"]);
 
 /**
  * Start a monthly subscription for one of the plan tiers.
@@ -28,45 +36,100 @@ export async function POST(req: Request) {
   }
   const tier = PLANS[plan];
 
-  // Already on this tier and not expired: renewing is SubScript's job.
-  if (user.plan === plan && planIsActive(user.plan, user.plan_expires_at)) {
+  const planActive = planIsActive(user.plan, user.plan_expires_at);
+  /* A cancelled subscription still has an unexpired period, so planIsActive
+     stays true right through the wind-down. Treating that as "live" is what made
+     resubscribing impossible: the guard below rejected the only tier the customer
+     wanted, and the UI offered no other way back. */
+  const windingDown =
+    !!user.sub_cancel_at_period_end ||
+    WINDING_DOWN.has(String(user.sub_status || "").toLowerCase());
+  const live = planActive && !windingDown;
+
+  // Genuinely live and set to continue: renewing really is SubScript's job.
+  if (user.plan === plan && live) {
     return Response.json(
       { error: `You are already on ${tier.name}. It renews automatically.` },
       { status: 400 }
     );
   }
 
+  /* Upgrade-only while a subscription is live, per SubScript: "Customer plan
+     changes are upgrade-only; do not build or expose a downgrade action." Once
+     it is winding down any tier is fair game, because the next checkout starts a
+     fresh authorization rather than modifying one. */
+  if (live && isPlanId(user.plan)) {
+    const currentRank = PLAN_ORDER.indexOf(user.plan);
+    if (PLAN_ORDER.indexOf(plan) < currentRank) {
+      return Response.json(
+        {
+          error: `Plan changes are upgrade-only. Cancel ${PLANS[user.plan].name} first, then subscribe to ${tier.name} once the period ends.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  /* Required rather than optional. SubScript makes `subscriber` mandatory
+     whenever an external reference is sent, and we always send one — so without
+     an address the request 400s with "invalid subscriber address" and surfaces
+     as an unexplained failure. It is also the field that makes the DM offer get
+     written, so there is no version of this that works without it. */
+  const subscriberAddress = isWalletAddress(user.wallet_address)
+    ? user.wallet_address!.trim()
+    : undefined;
+  if (!subscriberAddress) {
+    return Response.json(
+      {
+        error:
+          "Add your Arc wallet address (0x…) on this page before subscribing. SubScript binds the subscription to it and uses it to write the plan offer into your DM.",
+        needsWalletAddress: true,
+      },
+      { status: 400 }
+    );
+  }
+
+  /* The catalogue plan for this tier, when the bootstrap has run. Subscribing by
+     planId keeps every subscriber on the one published tier instead of minting a
+     fresh ad-hoc plan per checkout — which is what fills the DM plan picker with
+     duplicates. Falls back to amount + interval when absent. */
+  const catalogue = await one<{ plan_id: string }>(
+    "SELECT plan_id FROM merchant_plans WHERE tier = $1",
+    [plan]
+  );
+
+  /* On a tier change, park the outgoing authorization so it can be cancelled once
+     the replacement is live. Two active subscriptions are two charges. */
+  const superseded = user.plan !== plan && live ? user.subscription_id : null;
+
   const paymentId = `pay_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
   await q(
-    "INSERT INTO payments (id, user_id, product, amount_micros, status) VALUES ($1, $2, $3, $4, 'PENDING')",
-    [paymentId, user.id, plan, tier.priceUsdcMicros]
+    `INSERT INTO payments (id, user_id, product, amount_micros, status, supersedes_subscription_id)
+     VALUES ($1, $2, $3, $4, 'PENDING', $5)`,
+    [paymentId, user.id, plan, tier.priceUsdcMicros, superseded]
   );
 
   try {
-    const subscriberAddress = isWalletAddress(user.wallet_address)
-      ? user.wallet_address!.trim()
-      : undefined;
     const { devMode, subscription } = await createSubscription({
       title: `Kris's Script ${tier.name}`,
       description: `${tier.messages} messages per month`,
       amountUsdcMicros: tier.priceUsdcMicros,
       interval: PLAN_INTERVAL,
+      planId: catalogue?.plan_id,
       /* The subscriber's on-chain address, and the reason the DM flow works or
          doesn't: publishing creates the catalogue plan, but SubScript only
          writes the DM subscription offer when it also receives `subscriber`.
-         Without it you get a plan in the picker and an empty thread.
-
-         wallet_address is address-only now that commit ids have their own
-         column, so this is normally just the stored value; the guard stays
-         because the API rejects anything else as "invalid subscriber address"
-         and older rows may predate the split. */
+         Without it you get a plan in the picker and an empty thread. */
       subscriber: subscriberAddress,
-      /* Our stable key for this customer. Comes back on every subscription
-         event as merchant_customer_id / external_reference, and is returned by
-         GET /api/v1/subscriptions, so the mapping survives both a missed
-         delivery and a resume — which mints a new subscription id. */
-      externalReference: `user:${user.id}:plan:${plan}`,
+      /* Our stable key for this customer — the id only, with no tier in it.
+         SubScript models an upgrade as a new subscription that keeps the same
+         customer id, so a reference naming the tier would change identity on
+         every upgrade, which defeats the point. The tier is recovered from the
+         charged amount when an event needs it. Comes back on every subscription
+         event as merchant_customer_id / external_reference, and survives a
+         resume — which mints a new subscription id. */
+      externalReference: `user:${user.id}`,
       idempotencyKey: paymentId,
     });
 
@@ -90,9 +153,11 @@ export async function POST(req: Request) {
       checkoutUrl: subscription.checkoutUrl,
       /* Reported so the caller does not have to infer why a DM did or did not
          arrive. Publishing alone puts the plan in the catalogue; the DM offer
-         additionally needs the subscriber's address. */
+         additionally needs the subscriber's address, which is now mandatory. */
       published: publishToDmEnabled(),
-      dmOffer: publishToDmEnabled() && !!subscriberAddress,
+      dmOffer: publishToDmEnabled(),
+      viaCataloguePlan: !!catalogue?.plan_id,
+      supersedes: superseded,
     });
   } catch (err) {
     // Roll back so an unreachable SubScript leaves no phantom pending row.
@@ -106,10 +171,27 @@ export async function POST(req: Request) {
   }
 }
 
-/** The plan catalogue, so the pricing page renders from one definition. */
+/**
+ * The plan catalogue, so the pricing page renders from one definition.
+ *
+ * Each tier carries its SubScript catalogue plan id and `subscribeUrl` when the
+ * bootstrap has run. That url is SubScript's own hosted checkout for the plan, so
+ * it is what the UI offers as a share link — there is no need to mint anything of
+ * our own for a subscriber who wants to send a plan to a friend.
+ */
 export async function GET() {
+  const { rows } = await q("SELECT tier, plan_id, subscribe_url FROM merchant_plans");
+  const catalogue = new Map(
+    rows.map((r) => [String(r.tier), { planId: r.plan_id, shareUrl: r.subscribe_url }])
+  );
+
   return Response.json({
     interval: PLAN_INTERVAL,
-    plans: Object.values(PLANS),
+    plans: Object.values(PLANS).map((p) => ({
+      ...p,
+      planId: catalogue.get(p.id)?.planId ?? null,
+      shareUrl: catalogue.get(p.id)?.shareUrl ?? null,
+    })),
+    bootstrapped: catalogue.size > 0,
   });
 }

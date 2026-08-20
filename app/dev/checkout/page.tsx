@@ -10,6 +10,7 @@ function DevCheckout() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [eventType, setEventType] = useState<string>("default");
+  const [gift, setGift] = useState(false);
 
   async function complete(typeToSimulate?: string) {
     setBusy(true);
@@ -18,7 +19,7 @@ function DevCheckout() {
     const res = await fetch("/api/dev/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ intentId, eventType: selectedType }),
+      body: JSON.stringify({ intentId, eventType: selectedType, gift }),
     });
     const data = await res.json();
     if (!res.ok || !data.ok) {
@@ -69,7 +70,7 @@ function DevCheckout() {
             </option>
             <option value="subscription.canceled">subscription.canceled (mark canceled)</option>
             <option value="subscription.reactivated">
-              subscription.reactivated (resume, new id, no charge)
+              subscription.reactivated (resume — new id, charged, new period)
             </option>
             <option value="subscription.payment_failed">
               subscription.payment_failed (past due)
@@ -82,6 +83,35 @@ function DevCheckout() {
             </option>
             <option value="payment.failed">payment.failed (mark charge failed)</option>
           </select>
+        </div>
+
+        {/* GIFT SIMULATION */}
+        <div style={{ margin: "0 0 16px", textAlign: "left" }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              fontSize: "0.85rem",
+              opacity: 0.9,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={gift}
+              onChange={(e) => setGift(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              Pay as someone else (gift). Sends <code>payer_address</code> and{" "}
+              <code>beneficiary_address</code> as two different wallets, so it settles as a
+              one-time payment: the plan is granted for one duration and marked
+              non-renewing. Overrides the event type above — a gift always arrives as{" "}
+              <code>payment.succeeded</code>, never as a subscription. Needs a wallet address
+              on the account.
+            </span>
+          </label>
         </div>
 
         <button className="btn" onClick={() => complete()} disabled={busy || !intentId}>
