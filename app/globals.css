@@ -952,6 +952,16 @@ input:focus {
   padding: 24px;
   box-shadow: var(--shadow);
   animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Bound to the viewport (less the overlay's 16px padding) and laid out as a
+     column so the body can take the leftover space and scroll. Without this the
+     panel grew past the screen on short viewports and the cards at the bottom —
+     billing status, the pay-as-you-chat setup and its inputs — were simply
+     unreachable, with nothing to scroll. */
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 @keyframes modalPop {
@@ -970,6 +980,8 @@ input:focus {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  /* Stays put while the body scrolls, so the close button is always reachable. */
+  flex: 0 0 auto;
 }
 
 .user-email-tag {
@@ -985,6 +997,7 @@ input:focus {
   text-align: center;
   gap: 12px;
   margin-bottom: 24px;
+  flex: 0 0 auto;
 }
 
 .profile-hero h2 {
@@ -996,6 +1009,17 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Takes the space the header and hero leave and scrolls within it. min-height:0
+     is what actually permits shrinking below the content size in a flex column;
+     overflow alone does nothing without it. overscroll-behavior keeps a flick at
+     the end of the list from scrolling the chat behind the overlay. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room for the scrollbar without shifting the cards off-centre. */
+  padding-right: 6px;
+  margin-right: -6px;
 }
 
 .modal-card {
