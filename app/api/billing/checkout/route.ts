@@ -69,24 +69,15 @@ export async function POST(req: Request) {
     }
   }
 
-  /* Required rather than optional. SubScript makes `subscriber` mandatory
-     whenever an external reference is sent, and we always send one — so without
-     an address the request 400s with "invalid subscriber address" and surfaces
-     as an unexplained failure. It is also the field that makes the DM offer get
-     written, so there is no version of this that works without it. */
+  /* The subscriber's address when we already know it, and simply absent when we
+     do not. Nobody is asked to type it: the first checkout goes out without it
+     (and therefore without our reference, which SubScript will not accept alone),
+     the customer connects their wallet at SubScript's checkout, and the
+     activation event carries the address back for handleSubscriptionEvent to file.
+     From then on every checkout carries both. */
   const subscriberAddress = isWalletAddress(user.wallet_address)
     ? user.wallet_address!.trim()
     : undefined;
-  if (!subscriberAddress) {
-    return Response.json(
-      {
-        error:
-          "Add your Arc wallet address (0x…) on this page before subscribing. SubScript binds the subscription to it and uses it to write the plan offer into your DM.",
-        needsWalletAddress: true,
-      },
-      { status: 400 }
-    );
-  }
 
   /* The catalogue plan for this tier, when the bootstrap has run. Subscribing by
      planId keeps every subscriber on the one published tier instead of minting a
@@ -150,11 +141,12 @@ export async function POST(req: Request) {
       priceUsdc: tier.priceUsdc,
       interval: PLAN_INTERVAL,
       checkoutUrl: subscription.checkoutUrl,
-      /* Both always true now: every checkout publishes, and `subscriber` is
-         mandatory, so the catalogue plan and the DM offer are never written
-         apart. Kept in the response because the client still reports them. */
+      /* Publishing is unconditional, so the catalogue entry always happens. The
+         DM offer needs `subscriber`, which a first-time subscriber has not
+         supplied yet — it arrives with the activation event. So the first
+         checkout publishes without a DM offer, and every later one has both. */
       published: true,
-      dmOffer: true,
+      dmOffer: !!subscriberAddress,
       viaCataloguePlan: !!catalogue?.plan_id,
       supersedes: superseded,
     });

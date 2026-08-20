@@ -8,6 +8,7 @@ import {
   eventObject,
   field,
   toEpochSeconds,
+  isWalletAddress,
   paymentParties,
   isSponsoredPayment,
   sponsoredDurationSeconds,
@@ -586,6 +587,17 @@ export async function handleSubscriptionEvent(
     [userId]
   );
 
+  /* The subscriber's on-chain address, learned rather than asked for.
+     Nobody types their address into this app any more — the first checkout goes
+     out without one, the customer connects their wallet on SubScript's checkout
+     page, and it comes back here. Filing it is what lets every later checkout
+     carry our externalReference (which SubScript refuses without a subscriber),
+     and it is also the only key a gifted payment can resolve against. */
+  const rawSubscriber = field(obj, "subscriber", "subscriber_address");
+  const learnedAddress = isWalletAddress(rawSubscriber)
+    ? String(rawSubscriber).trim()
+    : null;
+
   switch (kind) {
     /* ── Access begins or is extended ─────────────────────────────────── */
     case "activated":
@@ -601,13 +613,14 @@ export async function handleSubscriptionEvent(
                 plan_expires_at = $2,
                 subscription_id = COALESCE($3::text, subscription_id),
                 sub_checkout_id = COALESCE($4::text, sub_checkout_id),
+                wallet_address = COALESCE(wallet_address, $5::text),
                 sub_status = 'active',
                 sub_cancel_at_period_end = 0,
                 sub_alert = NULL,
                 plan_gifted = 0,
                 plan_gifted_by = NULL
-          WHERE id = $5`,
-        [plan, subscriptionPeriodEnd(obj, now), subId, checkoutId, userId]
+          WHERE id = $6`,
+        [plan, subscriptionPeriodEnd(obj, now), subId, checkoutId, learnedAddress, userId]
       );
       /* Settle the originating payment row too. This function only ever touched
          users, so a subscription could be fully active while its payment stayed
@@ -644,11 +657,12 @@ export async function handleSubscriptionEvent(
             SET plan_expires_at = COALESCE($1::integer, plan_expires_at),
                 subscription_id = COALESCE($2::text, subscription_id),
                 sub_checkout_id = COALESCE($3::text, sub_checkout_id),
+                wallet_address = COALESCE(wallet_address, $4::text),
                 sub_status = 'active',
                 sub_cancel_at_period_end = 0,
                 sub_alert = NULL
-          WHERE id = $4`,
-        [stated, subId, checkoutId, userId]
+          WHERE id = $5`,
+        [stated, subId, checkoutId, learnedAddress, userId]
       );
       /* A resume that charged has a payments row behind it, same as any other
          checkout, and it stays PENDING forever unless settled here. */

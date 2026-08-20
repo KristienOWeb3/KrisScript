@@ -26,7 +26,6 @@ export default function PricingPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
   const [commitInput, setCommitInput] = useState("");
-  const [walletInput, setWalletInput] = useState("");
   const [copiedMerchant, setCopiedMerchant] = useState(false);
   const [copiedShare, setCopiedShare] = useState("");
   const [catalogue, setCatalogue] = useState<
@@ -119,15 +118,6 @@ export default function PricingPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Could not start the subscription.");
-        /* The wallet address is now required rather than optional — SubScript
-           makes `subscriber` mandatory alongside our reference, and it is what
-           makes the DM offer get written. Scroll the field into view instead of
-           leaving the message to be hunted for. */
-        if (data.needsWalletAddress) {
-          document
-            .querySelector<HTMLInputElement>('input[placeholder="0x..."]')
-            ?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
         setBusy("");
         return;
       }
@@ -166,7 +156,7 @@ export default function PricingPage() {
     const res = await fetch("/api/billing/payg", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commitId: commitInput.trim(), walletAddress: walletInput.trim() }),
+      body: JSON.stringify({ commitId: commitInput.trim() }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -174,7 +164,6 @@ export default function PricingPage() {
     } else {
       showToast("Saved.");
       setCommitInput("");
-      setWalletInput("");
       load();
     }
     setBusy("");
@@ -189,7 +178,6 @@ export default function PricingPage() {
       body: JSON.stringify({
         enabled,
         commitId: commitInput.trim(),
-        walletAddress: walletInput.trim(),
       }),
     });
     const data = await res.json();
@@ -502,25 +490,16 @@ export default function PricingPage() {
                     </p>
                   )}
 
-                  <label className="input-label">
-                    Wallet address — subscriptions and DM offers:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="0x..."
-                    value={walletInput}
-                    onChange={(e) => setWalletInput(e.target.value)}
-                    className="payg-input"
-                  />
-                  {user?.walletAddress ? (
+                  {/* No wallet-address input. The address is never asked for:
+                      the subscriber connects their wallet on SubScript's checkout
+                      page and the activation event carries it back, so it is
+                      learned rather than typed. Shown once known, because it is
+                      what the subscription is bound to and what a gifted payment
+                      resolves against. */}
+                  {user?.walletAddress && (
                     <p className="input-hint">
-                      On file: <code>{user.walletAddress}</code>
-                    </p>
-                  ) : (
-                    <p className="input-hint warn">
-                      Required to subscribe. SubScript binds the subscription to this
-                      address and only writes the DM plan offer when it receives one, so a
-                      plan checkout cannot be started without it.
+                      Subscription wallet: <code>{user.walletAddress}</code>{" "}
+                      <span className="muted">— learned from your last payment</span>
                     </p>
                   )}
 
@@ -528,7 +507,7 @@ export default function PricingPage() {
                     className="btn secondary small"
                     style={{ width: "100%", marginBottom: 10 }}
                     onClick={saveIdentifiers}
-                    disabled={busy !== "" || (!commitInput.trim() && !walletInput.trim())}
+                    disabled={busy !== "" || !commitInput.trim()}
                   >
                     {busy === "save" ? "Saving..." : "Save identifiers"}
                   </button>

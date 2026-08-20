@@ -312,26 +312,28 @@ export async function createSubscription(opts: {
        missed delivery. Previously this was sent only alongside `subscriber`,
        so a user without a wallet address produced events with no reference at
        all and fulfillment leaned entirely on the id recorded at creation. */
-    externalReference: opts.externalReference,
-    /* Required, not optional, whenever externalReference or merchantCustomerId
-       is sent — the API's own rule. We always send a reference, so omitting the
-       subscriber for an account with no address on file made the request 400
-       with "invalid subscriber address" and surfaced as a generic failure with
-       no hint about the cause. Callers now check for an address first and say
-       what to do about it; this throw is the backstop.
+    /* Our reference and the subscriber's address travel together or not at all.
+       SubScript makes `subscriber` mandatory whenever an externalReference or
+       merchantCustomerId is sent, so a reference without an address is a 400 —
+       which is exactly the silent failure this pairing exists to prevent.
 
-       Sending it is also what makes SubScript write the DM subscription offer,
-       so its absence is the difference between a catalogue plan with a DM and
-       one with an empty thread. */
-    subscriber: opts.subscriber,
+       An account's FIRST subscription has neither. Nobody is asked to type their
+       address any more, so we do not know it until they connect their wallet on
+       SubScript's checkout page. That checkout still resolves without a
+       reference: the payments row records the checkout id, and
+       resolveSubscriptionSubject falls back to it. The activation event then
+       carries `subscriber` back, which is where users.wallet_address gets filled
+       in — so every later checkout carries the reference, and with it the only
+       key that survives a resume. */
+    ...(isWalletAddress(opts.subscriber)
+      ? {
+          subscriber: opts.subscriber!.trim(),
+          externalReference: opts.externalReference,
+        }
+      : {}),
     idempotencyKey: opts.idempotencyKey,
     sandbox: !isLiveKey,
   };
-  if (!isWalletAddress(opts.subscriber)) {
-    throw new SubScriptError(
-      "A wallet address is required to start a subscription. Add one on the billing page first."
-    );
-  }
   if (appUrl().startsWith("https://")) {
     body.successUrl = `${appUrl()}/billing/success`;
     body.cancelUrl = `${appUrl()}/billing/cancel`;
