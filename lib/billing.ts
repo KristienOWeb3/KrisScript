@@ -7,6 +7,7 @@ import {
   eventObject,
   field,
   toEpochSeconds,
+  isWalletAddress,
 } from "./subscript";
 import {
   PLANS,
@@ -54,12 +55,19 @@ export async function fulfillPayment(
 
   /* `beneficiary` is present only when the wallet receiving the service differs
      from the wallet paying, and it is the one entitlement belongs to. Falling
-     back to the payer is correct when it is absent, which is the usual case. */
+     back to the payer is correct when it is absent, which is the usual case.
+
+     Checked with isWalletAddress before storing: wallet_address is address-only
+     now that commit ids have their own column, and this writes a value straight
+     off the wire. */
   const wallet =
     field(obj, "beneficiary") ??
     field(obj, "subscriber", "subscriber_address", "user_address", "wallet_address");
-  if (wallet) {
-    await q("UPDATE users SET wallet_address = COALESCE(wallet_address, $1) WHERE id = $2", [wallet, payment.user_id]);
+  if (isWalletAddress(wallet)) {
+    await q("UPDATE users SET wallet_address = COALESCE(wallet_address, $1) WHERE id = $2", [
+      String(wallet).trim(),
+      payment.user_id,
+    ]);
   }
 
   const claim = await q(

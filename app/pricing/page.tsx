@@ -25,7 +25,8 @@ export default function PricingPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"subscript" | "card">("subscript");
-  const [paygWalletInput, setPaygWalletInput] = useState("");
+  const [commitInput, setCommitInput] = useState("");
+  const [walletInput, setWalletInput] = useState("");
   const [copiedMerchant, setCopiedMerchant] = useState(false);
 
   function copyMerchantName() {
@@ -44,9 +45,9 @@ export default function PricingPage() {
       const data = await fetch("/api/me").then((r) => r.json());
       if (!data.user) return router.replace("/login");
       setMe(data);
-      if (data.user?.walletAddress) {
-        setPaygWalletInput((prev) => prev || data.user.walletAddress);
-      }
+      /* Not prefilled: what is already saved is shown as an "On file" hint
+         under each input instead, so the boxes stay empty for new entry and a
+         cleared field cannot be silently re-submitted. */
 
       // Fetch transaction history
       const txRes = await fetch("/api/billing/transactions").then((r) => r.json());
@@ -122,13 +123,40 @@ export default function PricingPage() {
     }
   }
 
+  /* Save the identifiers without touching the pay-as-you-chat toggle, so an
+     address can be put on file purely to bind subscriptions and get the DM
+     offer written. */
+  async function saveIdentifiers() {
+    setBusy("save");
+    setError("");
+    const res = await fetch("/api/billing/payg", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commitId: commitInput.trim(), walletAddress: walletInput.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+    } else {
+      showToast("Saved.");
+      setCommitInput("");
+      setWalletInput("");
+      load();
+    }
+    setBusy("");
+  }
+
   async function setPayg(enabled: boolean) {
     setBusy("payg");
     setError("");
     const res = await fetch("/api/billing/payg", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled, walletAddress: paygWalletInput.trim() }),
+      body: JSON.stringify({
+        enabled,
+        commitId: commitInput.trim(),
+        walletAddress: walletInput.trim(),
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -395,14 +423,59 @@ export default function PricingPage() {
                     </li>
                   </ol>
 
-                  <label className="input-label">SubScript Commit ID / Vault Address:</label>
+                  <label className="input-label">
+                    SubScript Commit ID — metered usage:
+                  </label>
                   <input
                     type="text"
-                    placeholder="Paste SubScript Commit ID (cmt_...) or 0x... address"
-                    value={paygWalletInput}
-                    onChange={(e) => setPaygWalletInput(e.target.value)}
+                    placeholder="cmt_..."
+                    value={commitInput}
+                    onChange={(e) => setCommitInput(e.target.value)}
                     className="payg-input"
                   />
+                  {user?.commitId && (
+                    <p className="input-hint">
+                      On file: <code>{user.commitId}</code>
+                    </p>
+                  )}
+
+                  <label className="input-label">
+                    Wallet address — subscriptions and DM offers:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="0x..."
+                    value={walletInput}
+                    onChange={(e) => setWalletInput(e.target.value)}
+                    className="payg-input"
+                  />
+                  {user?.walletAddress ? (
+                    <p className="input-hint">
+                      On file: <code>{user.walletAddress}</code>
+                    </p>
+                  ) : (
+                    <p className="input-hint warn">
+                      No address on file. A plan checkout still publishes to the plan
+                      catalogue, but SubScript only writes the DM subscription offer when it
+                      receives a subscriber address — so the thread stays empty without this.
+                    </p>
+                  )}
+                  {user && !user.dmPublishing && (
+                    <p className="input-hint warn">
+                      DM publishing is off on this deployment. Set{" "}
+                      <code>SUBSCRIPT_PUBLISH_TO_DM=1</code> to publish plans into the
+                      catalogue and DM flow.
+                    </p>
+                  )}
+
+                  <button
+                    className="btn secondary small"
+                    style={{ width: "100%", marginBottom: 10 }}
+                    onClick={saveIdentifiers}
+                    disabled={busy !== "" || (!commitInput.trim() && !walletInput.trim())}
+                  >
+                    {busy === "save" ? "Saving..." : "Save identifiers"}
+                  </button>
 
                   {user?.paygEnabled ? (
                     <div className="payg-action-wrap">

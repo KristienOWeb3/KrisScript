@@ -688,7 +688,7 @@ export default function ChatPage() {
                   <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     <input
                       type="text"
-                      placeholder="Paste SubScript Commit ID (cmt_...) or 0x... address"
+                      placeholder="cmt_... for usage, or 0x... to also bind subscriptions"
                       value={paygWalletInput}
                       onChange={(e) => setPaygWalletInput(e.target.value)}
                       style={{ fontSize: "0.82rem", height: 38 }}

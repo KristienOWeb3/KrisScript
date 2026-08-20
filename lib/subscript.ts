@@ -135,6 +135,20 @@ export function environmentMismatch(obj: any): string | null {
   return `event is ${actual}, this deployment's key is ${expected}`;
 }
 
+/**
+ * Whether to publish plan checkouts into SubScript's plan catalogue and DM flow.
+ *
+ * Off unless SUBSCRIPT_PUBLISH_TO_DM says otherwise. Publishing is not a local
+ * concern: MerchantPlan carries no environment of its own and no plan query
+ * filters on one, so a plan created with a test key sits in the same public
+ * catalogue as live plans and is subscribable with real money. Fine on testnet,
+ * not something a mainnet deploy should opt into by accident.
+ */
+export function publishToDmEnabled(): boolean {
+  const raw = (process.env.SUBSCRIPT_PUBLISH_TO_DM || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 export class SubScriptError extends Error {
   code?: string;
   requestId?: string;
@@ -283,10 +297,22 @@ export async function createSubscription(opts: {
     description: opts.description,
     amountUsdcMicros: opts.amountUsdcMicros,
     interval: opts.interval,
-    // SubScript's live DM plan publication is not supported by sandbox/test
-    // keys. Keep recurring checkout testable with sk_test_* keys, and only
-    // publish into the DM plan flow when using a live merchant key.
-    publishToDm: isLiveKey ? (opts.publishToDm ?? false) : false,
+    /* Sent explicitly in both directions, deliberately. Omitting this field
+       does NOT mean "off": SubScript publishes unless it receives a literal
+       false (`publishToDm !== false`), so silence would opt every deployment
+       into the public plan catalogue.
+
+       The previous gate — publish only with a live key — rested on sandbox and
+       test keys being unable to publish. They can: the premium-tier check is
+       explicitly waived for test mode. Worse, the only caller never passed
+       publishToDm, so `opts.publishToDm ?? false` made the ternary false on
+       both branches. No code path could ever send true, which is why plans
+       never reached the DM flow.
+
+       Note the asymmetry when this is on: publishing creates the catalogue
+       plan, but the DM offer is only written when `subscriber` is also sent.
+       Without an address you get a plan in the picker and an empty thread. */
+    publishToDm: opts.publishToDm ?? publishToDmEnabled(),
     /* Always send our own reference, whether or not we have a subscriber
        address. It is the stable key every subscription event carries back as
        merchant_customer_id / external_reference, and the only field that
@@ -297,9 +323,11 @@ export async function createSubscription(opts: {
        so a user without a wallet address produced events with no reference at
        all and fulfillment leaned entirely on the id recorded at creation. */
     externalReference: opts.externalReference,
-    /* wallet_address may hold a commit id rather than an address; the API
-       rejects a commit id here with "invalid subscriber address", so the
-       caller passes undefined unless it has a genuine 0x address. */
+    /* Omitted rather than sent empty when the account has no address on file:
+       the API rejects anything that is not a 0x address here with "invalid
+       subscriber address". Sending it is also what makes SubScript write the DM
+       subscription offer, so its absence is the difference between a catalogue
+       plan with a DM and one with an empty thread. */
     ...(opts.subscriber ? { subscriber: opts.subscriber } : {}),
     idempotencyKey: opts.idempotencyKey,
     sandbox: !isLiveKey,
@@ -520,14 +548,34 @@ export async function getSubscription(
 /**
  * True only for a real on-chain address.
  *
- * users.wallet_address deliberately holds EITHER a SubScript commit id
- * ("cmt_...") or a wallet address ("0x..."), because the pay-as-you-chat setup
- * accepts both and report-usage branches on which it got. Anything that needs
- * an actual address — the subscriptions API rejects a commit id with
- * "invalid subscriber address" — must check first rather than pass it through.
+ * The subscriptions API rejects anything else in `subscriber` with "invalid
+ * subscriber address", so a value that might be a vault commit id has to be
+ * checked rather than passed through.
  */
 export function isWalletAddress(value: string | null | undefined): boolean {
   return typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+}
+
+/**
+ * The identifier metered vault usage is reported against.
+ *
+ * A commit id when the account has one, otherwise the wallet address —
+ * report-usage accepts either, under different field names. Returns null when
+ * there is nothing usable, so callers gate on it rather than sending "".
+ *
+ * These used to share one column, which is what kept plans out of the DM flow:
+ * the pay-as-you-chat setup asks for a Commit ID, so `wallet_address` usually
+ * held `cmt_…`, and the subscribe path could not find an address to send as
+ * `subscriber`.
+ */
+export function usageTarget(user: {
+  commit_id?: string | null;
+  wallet_address?: string | null;
+}): string | null {
+  const commit = (user.commit_id || "").trim();
+  if (commit) return commit;
+  const address = (user.wallet_address || "").trim();
+  return isWalletAddress(address) ? address : null;
 }
 
 export async function reportUsage(

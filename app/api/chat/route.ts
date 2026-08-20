@@ -3,7 +3,7 @@ import { q, one } from "@/lib/db";
 import { planQuota } from "@/lib/billing";
 import { currentUser } from "@/lib/auth";
 import { chatCompletion } from "@/lib/deepseek";
-import { hasRealKey, reportUsage } from "@/lib/subscript";
+import { hasRealKey, reportUsage, usageTarget } from "@/lib/subscript";
 import {
   FREE_MESSAGE_CAP,
   PAYG_PRICE_USDC,
@@ -83,12 +83,18 @@ export async function POST(req: Request) {
 
   const quota = await planQuota(user);
 
+  /* What metered billing would be charged against: the vault commit id if the
+     account has one, otherwise its wallet address. Resolved once so the gate
+     below and the report-usage call further down cannot disagree about whether
+     this account is billable. */
+  const meteredTarget = usageTarget(user);
+
   if ((freeUsed?.c ?? 0) < FREE_MESSAGE_CAP) {
     billed = "free";
   } else if (quota.active && quota.remaining > 0) {
     // Covered by this month's plan allowance; no per-message charge.
     billed = quota.planId as keyof typeof PLANS;
-  } else if (user.payg_enabled && user.wallet_address) {
+  } else if (user.payg_enabled && meteredTarget) {
     if (!hasRealKey()) {
       const priceMicros = BigInt(PAYG_PRICE_USDC_MICROS);
       const alreadyMicros = usdcToMicros(user.payg_accrued);
@@ -151,7 +157,7 @@ export async function POST(req: Request) {
       ]);
     } else {
       const requestId = `kris-msg-${user.id}-${crypto.randomUUID()}`;
-      const usage = await reportUsage(user.wallet_address!, PAYG_PRICE_USDC_MICROS, requestId);
+      const usage = await reportUsage(meteredTarget!, PAYG_PRICE_USDC_MICROS, requestId);
       if (usage.status === 402) {
         return Response.json(
           {

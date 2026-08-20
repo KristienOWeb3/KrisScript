@@ -585,6 +585,25 @@ input:focus {
   box-sizing: border-box;
 }
 
+/* What is currently on file under an input, or why its absence matters. */
+.input-hint {
+  margin: -6px 0 10px;
+  font-size: 0.73rem;
+  line-height: 1.35;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.input-hint code {
+  font-size: 0.73rem;
+  color: var(--ink-2);
+}
+
+.input-hint.warn {
+  color: var(--amber);
+  word-break: normal;
+}
+
 .user-status-banner {
   display: flex;
   align-items: center;

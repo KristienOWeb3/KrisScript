@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   payg_enabled INTEGER NOT NULL DEFAULT 0,
   wallet_address TEXT,
   payg_accrued TEXT NOT NULL DEFAULT '0',
+  commit_id TEXT,
   subscription_id TEXT,
   sub_checkout_id TEXT,
   sub_status TEXT,
@@ -38,6 +39,20 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_checkout_id TEXT;
 -- cannot be resolved by topping up USDC — the subscriber must re-authorize —
 -- so it has to reach them rather than sit in a log.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_alert TEXT;
+-- wallet_address used to hold EITHER a vault commit id or an on-chain address,
+-- because report-usage accepts both. That conflation meant the subscribe path
+-- could not tell whether it had an address to send as the subscriber, and since
+-- the pay-as-you-chat setup asks for a Commit ID, it usually did not — so no
+-- DM subscription offer was ever written. The two now have their own columns.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS commit_id TEXT;
+-- Backfill, idempotent: moves any non-address value out of wallet_address and
+-- never overwrites a commit_id that is already set. After it runs, no row has a
+-- non-address in wallet_address, so later boots match nothing.
+UPDATE users
+   SET commit_id = COALESCE(commit_id, wallet_address),
+       wallet_address = NULL
+ WHERE wallet_address IS NOT NULL
+   AND lower(wallet_address) NOT LIKE '0x%';
 -- Paid display-name change: the requested name is parked in
 -- pending_display_name until the $1 USDC payment is fulfilled.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;

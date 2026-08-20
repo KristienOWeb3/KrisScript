@@ -16,7 +16,10 @@ export type User = {
   plan: "free" | "payg" | PlanId;
   plan_expires_at: number | null;
   payg_enabled: number;
+  /** On-chain address only ("0x…"). Used as the subscription `subscriber`. */
   wallet_address: string | null;
+  /** Vault commit id ("cmt_…"). Used for metered usage reporting. */
+  commit_id: string | null;
   payg_accrued: string;
   /** The current on-chain authorization. Changes when a subscriber resumes. */
   subscription_id: string | null;

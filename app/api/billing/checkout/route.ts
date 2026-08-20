@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { q, one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { createSubscription, isWalletAddress, SubScriptError } from "@/lib/subscript";
+import { createSubscription, isWalletAddress, publishToDmEnabled, SubScriptError } from "@/lib/subscript";
 import { PLANS, PLAN_INTERVAL, isPlanId, planIsActive } from "@/lib/plans";
 
 /**
@@ -44,16 +44,24 @@ export async function POST(req: Request) {
   );
 
   try {
+    const subscriberAddress = isWalletAddress(user.wallet_address)
+      ? user.wallet_address!.trim()
+      : undefined;
     const { devMode, subscription } = await createSubscription({
       title: `Kris's Script ${tier.name}`,
       description: `${tier.messages} messages per month`,
       amountUsdcMicros: tier.priceUsdcMicros,
       interval: PLAN_INTERVAL,
-      /* wallet_address may hold a commit id ("cmt_...") rather than an
-         address, since pay-as-you-chat accepts either. Sending a commit id
-         here is rejected as "invalid subscriber address", so only pass a
-         genuine 0x address and omit the field otherwise. */
-      subscriber: isWalletAddress(user.wallet_address) ? user.wallet_address! : undefined,
+      /* The subscriber's on-chain address, and the reason the DM flow works or
+         doesn't: publishing creates the catalogue plan, but SubScript only
+         writes the DM subscription offer when it also receives `subscriber`.
+         Without it you get a plan in the picker and an empty thread.
+
+         wallet_address is address-only now that commit ids have their own
+         column, so this is normally just the stored value; the guard stays
+         because the API rejects anything else as "invalid subscriber address"
+         and older rows may predate the split. */
+      subscriber: subscriberAddress,
       /* Our stable key for this customer. Comes back on every subscription
          event as merchant_customer_id / external_reference, and is returned by
          GET /api/v1/subscriptions, so the mapping survives both a missed
@@ -80,6 +88,11 @@ export async function POST(req: Request) {
       priceUsdc: tier.priceUsdc,
       interval: PLAN_INTERVAL,
       checkoutUrl: subscription.checkoutUrl,
+      /* Reported so the caller does not have to infer why a DM did or did not
+         arrive. Publishing alone puts the plan in the catalogue; the DM offer
+         additionally needs the subscriber's address. */
+      published: publishToDmEnabled(),
+      dmOffer: publishToDmEnabled() && !!subscriberAddress,
     });
   } catch (err) {
     // Roll back so an unreachable SubScript leaves no phantom pending row.
