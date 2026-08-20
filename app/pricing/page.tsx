@@ -55,6 +55,15 @@ export default function PricingPage() {
 
   async function load() {
     try {
+      /* Settle anything SubScript has since confirmed, before reading state.
+         The recovery path for a subscriber who closed the confirmation tab
+         before their charge cleared: nothing else in the app reconciles, and a
+         webhook cannot reach a localhost APP_URL. It grants nothing on our word
+         — SubScript still has to report the subscription active for the amount
+         we recorded — so the result is not worth branching on; the /api/me read
+         below shows whatever it changed. */
+      await fetch("/api/billing/reconcile", { method: "POST" }).catch(() => {});
+
       const data = await fetch("/api/me").then((r) => r.json());
       if (!data.user) return router.replace("/login");
       setMe(data);
@@ -109,6 +118,28 @@ export default function PricingPage() {
   async function subscribe(plan: string) {
     setBusy(plan);
     setError("");
+
+    /* Two tabs, because SubScript cannot send a subscriber back:
+       POST /api/v1/subscriptions takes no successUrl, so its hosted subscribe
+       page has no link home. Replacing this tab with the checkout — which is
+       what used to happen — meant the subscriber paid and then had nowhere to
+       land, so there was no payment-confirmed page for a plan at all, and the
+       reconciliation that page drives never ran.
+
+       Opened here, synchronously, before anything is awaited. A popup blocker
+       allows window.open only while the click's transient activation lasts, and
+       the checkout POST is a network round trip that outlives it — so opening
+       the tab first and pointing it at the url once we have it is the difference
+       between this working and being blocked. Blank until then.
+
+       Deliberately no "noopener" in the features string: passing it makes
+       window.open return null even when the tab opened fine, which would read as
+       blocked below and send this tab to the checkout as well, leaving two
+       checkouts and no confirmation page. That does leave SubScript's page with
+       an opener handle — acceptable for the payment provider we are already
+       trusting with the charge. */
+    const checkoutTab = window.open("about:blank", "_blank");
+
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
@@ -117,12 +148,23 @@ export default function PricingPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        checkoutTab?.close();
         setError(data.error || "Could not start the subscription.");
         setBusy("");
         return;
       }
-      window.location.href = data.checkoutUrl;
+
+      if (checkoutTab && data.confirmUrl) {
+        checkoutTab.location.href = data.checkoutUrl;
+        router.push(data.confirmUrl);
+      } else {
+        /* Blocked after all, or an older server with no confirmUrl: fall back to
+           the same-tab redirect. No confirmation page, but no worse than before. */
+        checkoutTab?.close();
+        window.location.href = data.checkoutUrl;
+      }
     } catch {
+      checkoutTab?.close();
       setError("Network error. Please try again.");
       setBusy("");
     }

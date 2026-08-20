@@ -141,6 +141,19 @@ export async function POST(req: Request) {
       priceUsdc: tier.priceUsdc,
       interval: PLAN_INTERVAL,
       checkoutUrl: subscription.checkoutUrl,
+      /* SubScript will not bring the subscriber back: POST /api/v1/subscriptions
+         accepts no successUrl or cancelUrl (see createSubscription), so unlike a
+         one-time intent this checkout ends on SubScript's page with no link home.
+         Stated rather than left for the client to assume, because it is the whole
+         reason the handoff opens a new tab instead of replacing the current one. */
+      providerReturnsToApp: false,
+      /* Where the tab that started this should wait. Carrying the checkout id
+         means confirm-return matches this exact payment on its first lookup —
+         real ids are `sub_<uuid>`, which is the form it searches for — rather
+         than falling back to the account's newest payment of any age. */
+      confirmUrl: `/billing/success?checkout_id=${encodeURIComponent(
+        subscription.id
+      )}&product=${encodeURIComponent(tier.id)}`,
       /* What was actually sent, not a guess at what SubScript did with it.
          Checkouts are no longer published to the DM catalogue — discovery comes
          from the bootstrapped catalogue plans — and `boundToSubscriber` says

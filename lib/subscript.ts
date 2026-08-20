@@ -333,10 +333,24 @@ export async function createSubscription(opts: {
     idempotencyKey: opts.idempotencyKey,
     sandbox: !isLiveKey,
   };
-  if (appUrl().startsWith("https://")) {
-    body.successUrl = `${appUrl()}/billing/success`;
-    body.cancelUrl = `${appUrl()}/billing/cancel`;
-  }
+  /* No successUrl / cancelUrl, deliberately.
+     POST /api/v1/subscriptions accepts neither — its body schema in
+     /openapi.json is planId, amountUsdcMicros, amountUsdc, interval,
+     intervalSeconds, intervalCount, subscriber, title, merchantCustomerId,
+     externalReference, publishToDm, idempotencyKey, sandbox. Only POST
+     /api/intent takes redirect urls.
+
+     We used to send them here anyway, guarded on an https APP_URL. They were
+     silently dropped, which made it look as though a subscriber would be
+     returned to /billing/success the way a one-time charge is. They never were:
+     they finish paying on SubScript's hosted subscribe page and stay there, with
+     no link back. So subscriptions had no payment-confirmed page at all, and
+     since that page is what drives reconcilePendingPayments, a real subscription
+     went unfulfilled whenever the webhook could not be delivered.
+
+     The return trip is therefore the client's job: /api/billing/checkout hands
+     back a confirmUrl, and /pricing opens this checkout in a new tab so the tab
+     it came from can wait on the confirmation. */
 
   const res = await fetch(`${BASE}/api/v1/subscriptions`, {
     method: "POST",

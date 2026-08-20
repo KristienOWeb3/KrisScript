@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { PLANS, isPlanId } from "@/lib/plans";
 
 /* ─────────────────────────────────────────────────────────
  * SUBSCRIPT RETURN LANDING
@@ -12,6 +13,13 @@ import { useEffect, useRef, useState } from "react";
  *
  * Product-aware: a $1 name change has nothing to do with plans
  * or account activation, so it does not show them.
+ *
+ * For a subscription this page is not reached by a redirect at all.
+ * POST /api/v1/subscriptions accepts no successUrl, so SubScript's
+ * subscribe page cannot send anyone here — /pricing opens that
+ * checkout in a second tab and sends the first one here instead.
+ * That also makes this the only thing that reconciles a plan, so it
+ * has to keep polling rather than assume a webhook will land.
  * ───────────────────────────────────────────────────────── */
 
 type Me = {
@@ -19,6 +27,11 @@ type Me = {
     email: string;
     activated: boolean;
     plan: string;
+    planName: string | null;
+    planActive: boolean;
+    planCap: number;
+    planExpiresAt: number | null;
+    willRenew: boolean;
     displayName: string;
     pendingDisplayName: string | null;
     paygEnabled: boolean;
@@ -26,6 +39,16 @@ type Me = {
   } | null;
   devMode?: boolean;
 };
+
+/** "19 Sep 2026", or null when there is no date to show. */
+function formatDate(epochSeconds: number | null | undefined): string | null {
+  if (!epochSeconds) return null;
+  return new Date(epochSeconds * 1000).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export default function BillingSuccessPage() {
   const [me, setMe] = useState<Me | null>(null);
@@ -57,6 +80,13 @@ export default function BillingSuccessPage() {
 
     const params = new URLSearchParams(window.location.search);
     const status = params.get("subscript_status") || params.get("status") || "success";
+    /* The product this checkout was for, when whoever sent us here knew it.
+       confirm-return reports it too, but only once it has answered — and for a
+       subscription that can take a while, so naming the tier straight away is
+       the difference between "confirming your payment" and confirming nothing
+       in particular. */
+    const productParam = params.get("product");
+    if (productParam) setProduct(productParam);
     const checkoutId =
       params.get("subscript_checkout_id") ||
       params.get("checkout_id") ||
@@ -110,6 +140,11 @@ export default function BillingSuccessPage() {
 
   const user = me?.user;
   const isNameChange = product === "name_change";
+  /* The tier this checkout bought, when it bought one. Named from the plan
+     catalogue rather than from the account, so the price and allowance are
+     right while the charge is still pending and the account is still on
+     whatever it was on before. */
+  const tier = isPlanId(product) ? PLANS[product] : undefined;
 
   /* Settled purely on the server's answer. Deriving it from the pending name
      instead was the bug: reconciliation now fulfills during the first
@@ -129,8 +164,9 @@ export default function BillingSuccessPage() {
           {heading}
         </h1>
         <p className="subtitle">
-          The redirect is not proof of payment — this unlocks only once SubScript
-          itself confirms the charge.
+          {tier
+            ? "Landing here is not proof of payment — the plan unlocks only once SubScript itself confirms the charge."
+            : "The redirect is not proof of payment — this unlocks only once SubScript itself confirms the charge."}
         </p>
 
         {!me ? (
@@ -159,6 +195,48 @@ export default function BillingSuccessPage() {
                 </div>
                 <div className="muted" style={{ marginTop: 6 }}>
                   Still your current name until then: <strong>{user.displayName}</strong>
+                  {elapsed > 0 && ` · ${elapsed}s`}
+                </div>
+              </>
+            )}
+          </div>
+        ) : tier ? (
+          <div className={confirmed ? "notice-box" : "error-box"}>
+            {confirmed ? (
+              <>
+                <div>
+                  <strong>{user.planName || tier.name}</strong> is live on{" "}
+                  <strong>{user.email}</strong>.
+                </div>
+                <div>
+                  {user.planCap || tier.messages} messages per month · $
+                  {tier.priceUsdc} USDC monthly
+                </div>
+                <div>
+                  {user.willRenew ? (
+                    <>
+                      Renews automatically on{" "}
+                      <strong>{formatDate(user.planExpiresAt) ?? "the period end"}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Access runs to{" "}
+                      <strong>{formatDate(user.planExpiresAt) ?? "the period end"}</strong>,
+                      and will not renew.
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  Waiting for SubScript to confirm the ${tier.priceUsdc} USDC charge for{" "}
+                  <strong>{tier.name}</strong>. Finish the checkout in the other tab if it
+                  is still open.
+                </div>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  The plan starts the moment SubScript reports the charge as paid — not
+                  when the checkout page closes
                   {elapsed > 0 && ` · ${elapsed}s`}
                 </div>
               </>
