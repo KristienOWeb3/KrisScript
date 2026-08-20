@@ -279,6 +279,72 @@ export function giftNotice(user: {
   );
 }
 
+/* ── The four states the two platforms must agree on ──────────────────
+ * Subscribed, cancelled, resumed, gifted. Those are the only transitions a
+ * customer can cause that both SubScript and this app have to reflect, and each
+ * arrives as a webhook: subscription.activated, subscription.cancel_scheduled /
+ * .canceled, subscription.reactivated, and payment.succeeded with two different
+ * addresses.
+ *
+ * Everything else in handleSubscriptionEvent is bookkeeping the customer never
+ * sees — renewals moving the period forward, a failed charge, advance notices.
+ *
+ * One definition, because the alternative was each surface deriving it: /pricing
+ * and /chat both worked out "is this winding down" from three fields apiece, with
+ * subtly different answers, and neither could tell a cancellation apart from a
+ * gift that simply runs out.
+ * ─────────────────────────────────────────────────────────────────── */
+
+export type SubscriptionStanding =
+  /** No paid plan. */
+  | "none"
+  /** Paying, renews automatically. */
+  | "active"
+  /** Told to stop; access runs to period end, and a resume can still arrive. */
+  | "canceling"
+  /** Authorization gone; access runs to period end. */
+  | "canceled"
+  /** Somebody else paid. One period, no authorization, will not renew. */
+  | "gifted"
+  /** A renewal charge failed. Recoverable — the authorization is still live. */
+  | "past_due"
+  /** The period ran out. */
+  | "expired";
+
+/**
+ * Where the subscription stands, and whether it is going to continue.
+ *
+ * `willRenew` is the question every surface actually wants answered, and it is not
+ * the same as "is the plan active": a cancelled subscription and a gifted period
+ * are both live and both ending.
+ */
+export function subscriptionStanding(user: {
+  plan?: string | null;
+  plan_expires_at?: number | null;
+  plan_gifted?: number | null;
+  sub_status?: string | null;
+  sub_cancel_at_period_end?: number | null;
+}): { standing: SubscriptionStanding; willRenew: boolean; active: boolean } {
+  const active = planIsActive(user.plan, user.plan_expires_at);
+  const status = String(user.sub_status || "").toLowerCase();
+
+  if (!active) {
+    const standing: SubscriptionStanding =
+      status === "expired" || isPlanId(user.plan) ? "expired" : "none";
+    return { standing, willRenew: false, active: false };
+  }
+  // Gift outranks a cancellation flag: it is why the flag is set.
+  if (user.plan_gifted) return { standing: "gifted", willRenew: false, active: true };
+  if (status === "past_due") return { standing: "past_due", willRenew: true, active: true };
+  if (status === "canceled" || status === "cancelled") {
+    return { standing: "canceled", willRenew: false, active: true };
+  }
+  if (status === "canceling" || user.sub_cancel_at_period_end) {
+    return { standing: "canceling", willRenew: false, active: true };
+  }
+  return { standing: "active", willRenew: true, active: true };
+}
+
 /**
  * Add a one-time payment's failure to the ledger so nothing waits on it.
  * Without this a failed charge is indistinguishable from one still in flight,

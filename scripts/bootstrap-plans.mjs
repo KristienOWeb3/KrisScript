@@ -5,6 +5,13 @@
  *   node scripts/bootstrap-plans.mjs            # publish (idempotent)
  *   node scripts/bootstrap-plans.mjs --check    # show state, publish nothing
  *
+ * What this buys: a durable plan id per tier to subscribe against, and a
+ * subscribeUrl anyone can pay. It does NOT make tiers appear in customers' DMs —
+ * that comes from the merchant updating their Subscriptions section in the
+ * SubScript dashboard by hand. What we can influence is where that entry points:
+ * detailsUrl sends a customer back to /pricing, which is the only place a plan
+ * change can actually happen.
+ *
  * Drives POST /api/admin/bootstrap-plans on the running app rather than talking
  * to SubScript directly, because the plan ids have to be recorded in the same
  * database the app uses — and locally that is PGlite, which allows a single
@@ -17,6 +24,9 @@
  * because POST /api/v1/plans takes no idempotency key and does not deduplicate on
  * name, so every stray re-run would otherwise leave a permanent duplicate in a
  * public catalogue.
+ *
+ * Run it with an HTTPS APP_URL. Price, period and detailsUrl are immutable once
+ * published, so a plan created from localhost has a permanently missing link.
  */
 import fs from "node:fs";
 import path from "node:path";

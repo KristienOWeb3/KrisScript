@@ -240,11 +240,11 @@ export default function ChatPage() {
         : isPayg
           ? "$0.10/msg"
           : "0 left";
-  const cancelsAtPeriodEnd = planActive && !!user?.subCancelAtPeriodEnd;
-  /* A gifted period ends rather than renews, so it reads as "ends" here too —
-     but the wording has to say why, because the subscriber never set it up and
-     has no authorization to manage. */
-  const isGifted = planActive && !!user?.planGifted;
+  /* From /api/me's shared definition, not re-derived: a cancellation and a gifted
+     period are both live and both ending, and the two surfaces answered that
+     differently when each worked it out from its own fields. */
+  const willEnd = planActive && !user?.willRenew;
+  const isGifted = user?.standing === "gifted";
   const planLabel = `${tier.label} · ${allowanceShort}`;
   const userName = user?.displayName || user?.email?.split("@")[0] || "";
   const userInitials = userName.charAt(0).toUpperCase();
@@ -264,7 +264,7 @@ export default function ChatPage() {
         <span className={`badge ${tier.id}`}>{tier.label}</span>
         <span className="plan-status-meta">
           {allowanceLabel}
-          {isGifted ? " · gifted, ends at period end" : cancelsAtPeriodEnd && " · ends at period end"}
+          {isGifted ? " · gifted, ends at period end" : willEnd && " · ends at period end"}
         </span>
       </div>
       {user?.giftNotice && <div className="plan-alert-note">{user.giftNotice}</div>}
@@ -396,7 +396,7 @@ export default function ChatPage() {
                 <span className={`badge ${tier.id}`}>{tier.label}</span>
                 <span className="profile-plan-meta">
                   {allowanceLabel}
-                  {cancelsAtPeriodEnd && " · ends at period end"}
+                  {isGifted ? " · gifted" : willEnd && " · ends at period end"}
                 </span>
               </div>
             </div>
@@ -520,8 +520,13 @@ export default function ChatPage() {
                       Current plan:{" "}
                       <strong style={{ color: "var(--accent)" }}>{tier.label}</strong>
                       {` · ${allowanceLabel}`}
-                      {cancelsAtPeriodEnd && " · cancels at period end"}
+                      {isGifted
+                        ? " · gifted, will not renew"
+                        : willEnd && " · cancels at period end"}
                     </div>
+                    {user?.giftNotice && (
+                      <div className="plan-alert-note">{user.giftNotice}</div>
+                    )}
                     {user?.subAlertMessage && (
                       <div className="plan-alert-note">{user.subAlertMessage}</div>
                     )}

@@ -201,20 +201,15 @@ export default function PricingPage() {
     : null;
   const displayName = user?.displayName || user?.email?.split("@")[0] || "";
 
-  /* Whether the plan is going to stop rather than renew. A cancellation and a
-     gift both land here: the first has an authorization that has been told to
-     stop, the second never had one. Either way the period ends and the useful
-     action is to start a subscription, not to cancel something. */
-  const windingDown =
-    !!user?.subCancelAtPeriodEnd ||
-    !!user?.planGifted ||
-    ["canceling", "canceled", "cancelled", "expired", "past_due"].includes(
-      String(user?.subStatus || "").toLowerCase()
-    );
+  /* Whether the plan is going to stop rather than renew. From /api/me's shared
+     definition rather than re-derived here — a cancellation and a gift are both
+     live and both ending, and working that out from three fields per surface is
+     how /pricing and /chat came to disagree. */
+  const windingDown = !!user?.planActive && !user?.willRenew;
   /* A live subscription is one that will charge again. Only then does the
      upgrade-only rule apply, because only then is there an authorization to
      supersede. */
-  const subscriptionLive = !!user?.planActive && !windingDown;
+  const subscriptionLive = !!user?.willRenew;
   const currentRank =
     user?.planActive && isPlanId(user.plan) ? PLAN_ORDER.indexOf(user.plan) : -1;
   const expiryLabel = user?.planExpiresAt
