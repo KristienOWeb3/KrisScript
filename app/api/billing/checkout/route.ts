@@ -4,7 +4,6 @@ import { currentUser } from "@/lib/auth";
 import {
   createSubscription,
   isWalletAddress,
-  publishToDmEnabled,
   SubScriptError,
 } from "@/lib/subscript";
 import { PLANS, PLAN_ORDER, PLAN_INTERVAL, isPlanId, planIsActive } from "@/lib/plans";
@@ -151,11 +150,11 @@ export async function POST(req: Request) {
       priceUsdc: tier.priceUsdc,
       interval: PLAN_INTERVAL,
       checkoutUrl: subscription.checkoutUrl,
-      /* Reported so the caller does not have to infer why a DM did or did not
-         arrive. Publishing alone puts the plan in the catalogue; the DM offer
-         additionally needs the subscriber's address, which is now mandatory. */
-      published: publishToDmEnabled(),
-      dmOffer: publishToDmEnabled(),
+      /* Both always true now: every checkout publishes, and `subscriber` is
+         mandatory, so the catalogue plan and the DM offer are never written
+         apart. Kept in the response because the client still reports them. */
+      published: true,
+      dmOffer: true,
       viaCataloguePlan: !!catalogue?.plan_id,
       supersedes: superseded,
     });

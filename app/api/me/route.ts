@@ -1,6 +1,6 @@
 import { one } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { hasRealKey, publishToDmEnabled } from "@/lib/subscript";
+import { hasRealKey } from "@/lib/subscript";
 import {
   FREE_MESSAGE_CAP,
   NAME_CHANGE_PRICE_USDC,
@@ -70,9 +70,6 @@ export async function GET() {
          offer); the commit id is what metered usage is billed against. */
       walletAddress: user.wallet_address,
       commitId: user.commit_id,
-      /* Whether a plan checkout would produce a DM offer, so the UI can say why
-         one is missing instead of leaving it to be guessed at. */
-      dmPublishing: publishToDmEnabled(),
       paygAccrued,
       paygMessages: paygRow?.c ?? 0,
       displayName: resolveDisplayName(user.display_name, user.email),

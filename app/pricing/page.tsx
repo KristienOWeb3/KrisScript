@@ -518,16 +518,9 @@ export default function PricingPage() {
                     </p>
                   ) : (
                     <p className="input-hint warn">
-                      No address on file. A plan checkout still publishes to the plan
-                      catalogue, but SubScript only writes the DM subscription offer when it
-                      receives a subscriber address — so the thread stays empty without this.
-                    </p>
-                  )}
-                  {user && !user.dmPublishing && (
-                    <p className="input-hint warn">
-                      DM publishing is off on this deployment. Set{" "}
-                      <code>SUBSCRIPT_PUBLISH_TO_DM=1</code> to publish plans into the
-                      catalogue and DM flow.
+                      Required to subscribe. SubScript binds the subscription to this
+                      address and only writes the DM plan offer when it receives one, so a
+                      plan checkout cannot be started without it.
                     </p>
                   )}
 

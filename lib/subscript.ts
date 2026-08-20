@@ -135,20 +135,6 @@ export function environmentMismatch(obj: any): string | null {
   return `event is ${actual}, this deployment's key is ${expected}`;
 }
 
-/**
- * Whether to publish plan checkouts into SubScript's plan catalogue and DM flow.
- *
- * Off unless SUBSCRIPT_PUBLISH_TO_DM says otherwise. Publishing is not a local
- * concern: MerchantPlan carries no environment of its own and no plan query
- * filters on one, so a plan created with a test key sits in the same public
- * catalogue as live plans and is subscribable with real money. Fine on testnet,
- * not something a mainnet deploy should opt into by accident.
- */
-export function publishToDmEnabled(): boolean {
-  const raw = (process.env.SUBSCRIPT_PUBLISH_TO_DM || "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
 export class SubScriptError extends Error {
   code?: string;
   requestId?: string;
@@ -276,7 +262,6 @@ export async function createSubscription(opts: {
   /** A catalogue plan uuid, when the tier has been bootstrapped. */
   planId?: string;
   subscriber?: string;
-  publishToDm?: boolean;
   externalReference: string;
   idempotencyKey: string;
 }): Promise<SubscriptionResult> {
@@ -304,22 +289,20 @@ export async function createSubscription(opts: {
     ...(opts.planId
       ? { planId: opts.planId }
       : { amountUsdcMicros: opts.amountUsdcMicros, interval: opts.interval }),
-    /* Sent explicitly in both directions, deliberately. Omitting this field
-       does NOT mean "off": SubScript publishes unless it receives a literal
-       false (`publishToDm !== false`), so silence would opt every deployment
-       into the public plan catalogue.
+    /* Always published, and sent as a literal rather than omitted.
 
-       The previous gate — publish only with a live key — rested on sandbox and
-       test keys being unable to publish. They can: the premium-tier check is
-       explicitly waived for test mode. Worse, the only caller never passed
-       publishToDm, so `opts.publishToDm ?? false` made the ternary false on
-       both branches. No code path could ever send true, which is why plans
-       never reached the DM flow.
+       Omitting it would reach the same outcome today — SubScript publishes unless
+       it receives an explicit false — but silently, on a default we do not
+       control. Stating it keeps the intent readable and survives that default
+       changing. Two earlier attempts at conditional publishing both failed
+       closed by accident (a live-key gate, when test keys can publish too; then
+       an env var no deployment had set), and each time the symptom was the same:
+       plans never reached the DM flow and nothing said why.
 
-       Note the asymmetry when this is on: publishing creates the catalogue
-       plan, but the DM offer is only written when `subscriber` is also sent.
-       Without an address you get a plan in the picker and an empty thread. */
-    publishToDm: opts.publishToDm ?? publishToDmEnabled(),
+       Note the asymmetry: publishing creates the catalogue plan, but the DM offer
+       is only written when `subscriber` is also sent — which is now mandatory, so
+       both halves always happen together. */
+    publishToDm: true,
     /* Always send our own reference, whether or not we have a subscriber
        address. It is the stable key every subscription event carries back as
        merchant_customer_id / external_reference, and the only field that
