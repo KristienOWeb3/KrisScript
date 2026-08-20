@@ -6,12 +6,17 @@ import { PLANS, PLAN_ORDER, PLAN_DURATION_SECONDS } from "@/lib/plans";
 /**
  * Publish the three tiers to SubScript's plan catalogue, once.
  *
- * Why this exists at all: subscribing with an inline amount + interval makes
- * SubScript mint a fresh ad-hoc plan for every checkout, so the public catalogue
- * and the DM plan picker fill up with duplicate "Kris's Script Pro" entries — one
- * per attempt, including abandoned ones. Posting each tier once and then
- * subscribing by `planId` keeps a single durable entry per tier, which is what
- * the DM plan controls are meant to show.
+ * What this buys: a durable plan id per tier to subscribe against, and a
+ * `subscribeUrl` anyone can pay. Subscribing with an inline amount + interval
+ * makes SubScript mint a fresh ad-hoc plan for every checkout, so the catalogue
+ * fills with one throwaway plan per attempt, abandoned ones included.
+ *
+ * What it does NOT buy: tiers appearing in a customer's DM. Plan visibility there
+ * comes from the merchant updating their Subscriptions section in the SubScript
+ * dashboard by hand. No API call does it. What we can influence is where that
+ * entry points — `detailsUrl` sends a customer browsing plans back to the
+ * platform, which is the only place a plan change can actually happen, because
+ * only a checkout we initiated can supersede the old subscription.
  *
  * Why it is a route rather than a standalone script: locally the database is
  * PGlite in data/pglite, and PGlite allows one process at a time. A script would
@@ -65,12 +70,12 @@ export async function POST(req: Request) {
     );
   }
 
-  /* The DM's link back to the platform. Only sent over HTTPS: SubScript refuses
-     plain-http URLs elsewhere in the API, and a localhost link in a published
-     plan would be a dead end for every customer anyway. Reported in the response
-     so a bootstrap run from localhost does not silently publish link-less plans —
-     and since price and period are immutable, a plan published without one cannot
-     be repaired by re-running this. */
+  /* The link a merchant's dashboard entry points at. Only sent over HTTPS:
+     SubScript refuses plain-http URLs elsewhere in the API, and a localhost link
+     in a published plan would be a dead end for every customer anyway. Reported in
+     the response so a bootstrap run from localhost does not silently publish
+     link-less plans — and since price and period are immutable, a plan published
+     without one cannot be repaired by re-running this. */
   const detailsUrl = appUrl().startsWith("https://") ? `${appUrl()}/pricing` : null;
 
   /* The live catalogue, so a tier that exists upstream is adopted rather than
@@ -119,11 +124,10 @@ export async function POST(req: Request) {
         // published plan on exactly the same clock.
         periodDays: Math.round(PLAN_DURATION_SECONDS / 86400),
         description: `${tier.messages} messages per month`,
-        /* Where the DM sends someone who wants this tier. The catalogue entry is
-           for looking at what the business offers; the change itself happens on
-           the platform, through a checkout we started and can therefore
-           supersede the old subscription from. Without this the DM is a dead end
-           or, worse, a second way to change plans that we never see coming. */
+        /* Where a customer browsing this tier in their DM gets sent. The change
+           itself has to happen on the platform: only a checkout we started can
+           retire the subscription it replaces, so a DM that let someone switch
+           tiers directly would produce a second authorization we never see. */
         ...(detailsUrl ? { detailsUrl } : {}),
       });
       await q(

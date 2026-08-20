@@ -86,12 +86,23 @@ export async function POST() {
     await q("UPDATE users SET plan_expires_at = $1 WHERE id = $2", [periodEnd, user.id]);
   }
 
-  if (status === "canceled" || status === "cancelled" || status === "deleted" || cancelAtPeriodEnd) {
-    await q(
-      "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
-      [user.id]
-    );
-    return Response.json({ synced: true, subStatus: "canceled", cancelAtPeriodEnd: true, periodEnd });
+  /* Scheduled to stop, but the authorization is gone or still standing? The two
+     are different states and were collapsed into one here, which meant a sync
+     right after a cancellation — from the DM or from this app — overwrote
+     'canceling' with 'canceled' and made a subscription that still had weeks left
+     read as finished. 'canceling' is what the local cancel and the
+     subscription.cancel_scheduled webhook both write; this now agrees with them.
+
+     Either way access runs to the period end already paid for, and either way
+     that window is when a resume can arrive. */
+  const gone = status === "canceled" || status === "cancelled" || status === "deleted";
+  if (gone || cancelAtPeriodEnd) {
+    const subStatus = gone ? "canceled" : "canceling";
+    await q("UPDATE users SET sub_cancel_at_period_end = 1, sub_status = $1 WHERE id = $2", [
+      subStatus,
+      user.id,
+    ]);
+    return Response.json({ synced: true, subStatus, cancelAtPeriodEnd: true, periodEnd });
   }
 
   if (status === "past_due") {

@@ -8,7 +8,7 @@ import {
   microsToUsdc,
 } from "@/lib/plans";
 import { resolveDisplayName } from "@/lib/displayName";
-import { planQuota, subAlertMessage, giftNotice } from "@/lib/billing";
+import { planQuota, subAlertMessage, giftNotice, subscriptionStanding } from "@/lib/billing";
 
 export async function GET() {
   const user = await currentUser();
@@ -36,6 +36,7 @@ export async function GET() {
   // Same helper the chat gate uses, so the number shown always matches the
   // number enforced.
   const quota = await planQuota(user);
+  const standing = subscriptionStanding(user);
 
   return Response.json({
     user: {
@@ -50,6 +51,12 @@ export async function GET() {
       planExpiresAt: quota.expiresAt,
       subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
       subStatus: user.sub_status ?? null,
+      /* Where the subscription stands, from one shared definition, so /pricing and
+         /chat cannot reach different conclusions about whether it continues.
+         willRenew is the question the UI actually asks: a cancelled subscription
+         and a gifted period are both live and both ending. */
+      standing: standing.standing,
+      willRenew: standing.willRenew,
       /* Whether this period was paid for by somebody else. A gift is a one-time
          payment with no standing authorization behind it, so it will not renew —
          the account looks exactly like a paying subscriber otherwise, right up

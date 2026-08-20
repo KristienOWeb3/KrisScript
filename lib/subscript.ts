@@ -626,15 +626,22 @@ export type MerchantPlan = {
 /**
  * Create a catalogue plan (POST /api/v1/plans).
  *
- * Publishing a plan is what puts a tier into the plan controls of every existing
- * user DM with this merchant, which is the durable way to reach the DM picker —
- * as opposed to letting each subscription checkout mint its own ad-hoc plan.
+ * What this is for: a durable plan id to subscribe against, and a `subscribeUrl`
+ * anyone can pay. Subscribing by `planId` keeps every subscriber on one published
+ * tier instead of minting an ad-hoc plan per checkout.
  *
- * There is deliberately no idempotencyKey parameter here because the endpoint
- * does not accept one, and it does not deduplicate on `name` either: calling
- * this twice creates two identical plans in the public catalogue. The caller is
- * responsible for recording the returned id and never re-posting a tier it
- * already has. Price and period are immutable afterwards.
+ * What it is NOT for: making tiers appear in a customer's DM. That is driven by
+ * the merchant updating their Subscriptions section in the SubScript dashboard by
+ * hand — not by this call, and not by anything an API can do. `detailsUrl` is the
+ * one lever we do have: it is the link the merchant's dashboard entry points at,
+ * so a customer browsing plans in the DM can be sent to the platform to check out.
+ *
+ * There is deliberately no idempotencyKey parameter because the endpoint does not
+ * accept one, and it does not deduplicate on `name` either: calling this twice
+ * creates two identical plans in the public catalogue. The caller is responsible
+ * for recording the returned id and never re-posting a tier it already has. Price
+ * and period are immutable afterwards, so a plan published with the wrong
+ * detailsUrl has to be replaced rather than corrected.
  */
 export async function createPlan(opts: {
   name: string;
