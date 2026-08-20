@@ -141,12 +141,13 @@ export async function POST(req: Request) {
       priceUsdc: tier.priceUsdc,
       interval: PLAN_INTERVAL,
       checkoutUrl: subscription.checkoutUrl,
-      /* Publishing is unconditional, so the catalogue entry always happens. The
-         DM offer needs `subscriber`, which a first-time subscriber has not
-         supplied yet — it arrives with the activation event. So the first
-         checkout publishes without a DM offer, and every later one has both. */
-      published: true,
-      dmOffer: !!subscriberAddress,
+      /* What was actually sent, not a guess at what SubScript did with it.
+         Checkouts are no longer published to the DM catalogue — discovery comes
+         from the bootstrapped catalogue plans — and `boundToSubscriber` says
+         whether we knew the address yet, which is what decides whether the
+         reference travelled with it. */
+      publishedToDm: false,
+      boundToSubscriber: !!subscriberAddress,
       viaCataloguePlan: !!catalogue?.plan_id,
       supersedes: superseded,
     });

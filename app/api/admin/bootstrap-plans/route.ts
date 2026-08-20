@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { q, one } from "@/lib/db";
-import { createPlan, listPlans, hasRealKey, SubScriptError } from "@/lib/subscript";
+import { createPlan, listPlans, hasRealKey, appUrl, SubScriptError } from "@/lib/subscript";
 import { PLANS, PLAN_ORDER, PLAN_DURATION_SECONDS } from "@/lib/plans";
 
 /**
@@ -65,6 +65,14 @@ export async function POST(req: Request) {
     );
   }
 
+  /* The DM's link back to the platform. Only sent over HTTPS: SubScript refuses
+     plain-http URLs elsewhere in the API, and a localhost link in a published
+     plan would be a dead end for every customer anyway. Reported in the response
+     so a bootstrap run from localhost does not silently publish link-less plans —
+     and since price and period are immutable, a plan published without one cannot
+     be repaired by re-running this. */
+  const detailsUrl = appUrl().startsWith("https://") ? `${appUrl()}/pricing` : null;
+
   /* The live catalogue, so a tier that exists upstream is adopted rather than
      duplicated. This is the guard that matters after a database reset: our table
      is empty but the plans are still published. */
@@ -111,6 +119,12 @@ export async function POST(req: Request) {
         // published plan on exactly the same clock.
         periodDays: Math.round(PLAN_DURATION_SECONDS / 86400),
         description: `${tier.messages} messages per month`,
+        /* Where the DM sends someone who wants this tier. The catalogue entry is
+           for looking at what the business offers; the change itself happens on
+           the platform, through a checkout we started and can therefore
+           supersede the old subscription from. Without this the DM is a dead end
+           or, worse, a second way to change plans that we never see coming. */
+        ...(detailsUrl ? { detailsUrl } : {}),
       });
       await q(
         `INSERT INTO merchant_plans (tier, plan_id, subscribe_url, amount_micros)
@@ -141,6 +155,13 @@ export async function POST(req: Request) {
       created,
       adopted,
       skipped,
+      detailsUrl,
+      ...(detailsUrl
+        ? {}
+        : {
+            warning:
+              "APP_URL is not HTTPS, so no detailsUrl was published. The DM entry will have no link back to the site, and price/period are immutable — start a tunnel and publish fresh plans instead of re-running this.",
+          }),
       ...(failed.length ? { failed } : {}),
       catalogue: rows,
     },

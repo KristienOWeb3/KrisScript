@@ -490,19 +490,6 @@ export default function PricingPage() {
                     </p>
                   )}
 
-                  {/* No wallet-address input. The address is never asked for:
-                      the subscriber connects their wallet on SubScript's checkout
-                      page and the activation event carries it back, so it is
-                      learned rather than typed. Shown once known, because it is
-                      what the subscription is bound to and what a gifted payment
-                      resolves against. */}
-                  {user?.walletAddress && (
-                    <p className="input-hint">
-                      Subscription wallet: <code>{user.walletAddress}</code>{" "}
-                      <span className="muted">— learned from your last payment</span>
-                    </p>
-                  )}
-
                   <button
                     className="btn secondary small"
                     style={{ width: "100%", marginBottom: 10 }}

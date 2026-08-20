@@ -289,20 +289,19 @@ export async function createSubscription(opts: {
     ...(opts.planId
       ? { planId: opts.planId }
       : { amountUsdcMicros: opts.amountUsdcMicros, interval: opts.interval }),
-    /* Always published, and sent as a literal rather than omitted.
+    /* Not published. A checkout is one customer starting one subscription; it is
+       not a catalogue entry, and publishing it made every attempt — abandoned
+       ones included — appear in the DM plan picker as another switchable tier.
 
-       Omitting it would reach the same outcome today — SubScript publishes unless
-       it receives an explicit false — but silently, on a default we do not
-       control. Stating it keeps the intent readable and survives that default
-       changing. Two earlier attempts at conditional publishing both failed
-       closed by accident (a live-key gate, when test keys can publish too; then
-       an env var no deployment had set), and each time the symptom was the same:
-       plans never reached the DM flow and nothing said why.
+       Discovery belongs to the catalogue plans created once by
+       POST /api/v1/plans, which carry a detailsUrl pointing back at the platform's
+       own pricing page. That is the intended shape: the DM shows what a business
+       offers and links out to it, and the actual plan change happens on the site,
+       through a checkout we initiated and can therefore supersede correctly.
 
-       Note the asymmetry: publishing creates the catalogue plan, but the DM offer
-       is only written when `subscriber` is also sent — which is now mandatory, so
-       both halves always happen together. */
-    publishToDm: true,
+       Sent as an explicit false rather than omitted, because omitting it does NOT
+       mean off — SubScript publishes unless it receives a literal false. */
+    publishToDm: false,
     /* Always send our own reference, whether or not we have a subscriber
        address. It is the stable key every subscription event carries back as
        merchant_customer_id / external_reference, and the only field that

@@ -91,6 +91,9 @@ if (adopted.length) console.log(`Adopted:  ${adopted.join(", ")} (already existe
 if (skipped.length) console.log(`Skipped:  ${skipped.join(", ")} (already recorded)`);
 if (!created.length && !adopted.length) console.log("Nothing to do — catalogue is already complete.");
 
+if (body.warning) console.warn(`\nWarning: ${body.warning}`);
+else if (body.detailsUrl) console.log(`\nDM links back to: ${body.detailsUrl}`);
+
 console.log("\nCatalogue:");
 for (const row of body.catalogue ?? []) {
   console.log(`  ${row.tier.padEnd(7)} ${row.plan_id}`);
