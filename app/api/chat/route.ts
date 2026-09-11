@@ -9,6 +9,7 @@ import {
   PAYG_PRICE_USDC,
   PAYG_PRICE_USDC_MICROS,
   DEV_VAULT_COMMIT_USDC,
+  DEFAULT_THINKING_TIME_MS,
   usdcToMicros,
   microsToUsdc,
   PLANS,
@@ -134,6 +135,7 @@ export async function POST(req: Request) {
     activeThread === "main" ? [user.id] : [user.id, activeThread]
   );
 
+  const startTime = Date.now();
   const history = [
     ...(recent.reverse() as { role: "user" | "assistant"; content: string }[]),
     { role: "user" as const, content: message.trim() },
@@ -147,6 +149,14 @@ export async function POST(req: Request) {
       { error: `The AI backend returned an error: ${(err as Error).message}` },
       { status: 502 }
     );
+  }
+
+  // Default thinking time is 4 seconds on FREE and SUBSCRIBED billing; never on PAYG.
+  if (billed !== "payg") {
+    const elapsed = Date.now() - startTime;
+    if (elapsed < DEFAULT_THINKING_TIME_MS) {
+      await new Promise((resolve) => setTimeout(resolve, DEFAULT_THINKING_TIME_MS - elapsed));
+    }
   }
 
   if (billed === "payg") {
@@ -205,5 +215,11 @@ export async function POST(req: Request) {
     [user.id, activeThread, reply]
   );
 
-  return Response.json({ reply, billed, threadId: activeThread });
+  const totalElapsedMs = Date.now() - startTime;
+  return Response.json({
+    reply,
+    billed,
+    threadId: activeThread,
+    thinkingDuration: `${(totalElapsedMs / 1000).toFixed(1)}s`,
+  });
 }

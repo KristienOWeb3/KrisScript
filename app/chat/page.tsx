@@ -114,6 +114,7 @@ export default function ChatPage() {
   }
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
 
   async function loadMe() {
     const data = await fetch("/api/me").then((r) => r.json());
@@ -137,7 +138,11 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0 || blocked) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = 0;
+    }
   }, [messages, blocked]);
 
   // Keep the view pinned to the bottom while a reply types itself out.
@@ -153,6 +158,9 @@ export default function ChatPage() {
     setBlocked(null);
     setStreamingReply(null);
     setSidebarOpen(false);
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = 0;
+    }
   }
 
   function selectThread(tId: string) {
@@ -170,6 +178,9 @@ export default function ChatPage() {
     setStreamingReply(null);
     setInput("");
     setMessages((m) => [...m, { role: "user", content: text }]);
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 40);
 
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -259,23 +270,37 @@ export default function ChatPage() {
      the docked composer) rather than kept in sync as two copies. Leads with the
      tier, since that is the thing the rest of the UI could not tell you. */
   const planDropdown = (
-    <div className="plan-dropdown-menu" onClick={() => setPlanDropdownOpen(false)}>
-      <div className="plan-status">
-        <span className={`badge ${tier.id}`}>{tier.label}</span>
-        <span className="plan-status-meta">
-          {allowanceLabel}
-          {isGifted ? " · gifted, ends at period end" : willEnd && " · ends at period end"}
-        </span>
+    <>
+      <div className="plan-dropdown-backdrop" onClick={() => setPlanDropdownOpen(false)} />
+      <div className="plan-dropdown-menu" onClick={(e) => e.stopPropagation()}>
+        <div className="plan-dropdown-header">
+          <span className="dropdown-title">Account Status</span>
+          <button
+            type="button"
+            className="icon-btn tiny"
+            onClick={() => setPlanDropdownOpen(false)}
+            title="Close"
+          >
+            <Icon name="x" size={13} />
+          </button>
+        </div>
+        <div className="plan-status">
+          <span className={`badge ${tier.id}`}>{tier.label}</span>
+          <span className="plan-status-meta">
+            {allowanceLabel}
+            {isGifted ? " · gifted, ends at period end" : willEnd && " · ends at period end"}
+          </span>
+        </div>
+        {user?.giftNotice && <div className="plan-alert-note">{user.giftNotice}</div>}
+        {user?.subAlertMessage && (
+          <div className="plan-alert-note">{user.subAlertMessage}</div>
+        )}
+        <a className="dropdown-item" href="/pricing" onClick={() => setPlanDropdownOpen(false)}>
+          <Icon name="zap" size={14} />
+          <span>{isGifted ? "Subscribe to keep it" : tier.paid ? "Manage plan" : "Plans & Pay-As-You-Chat"}</span>
+        </a>
       </div>
-      {user?.giftNotice && <div className="plan-alert-note">{user.giftNotice}</div>}
-      {user?.subAlertMessage && (
-        <div className="plan-alert-note">{user.subAlertMessage}</div>
-      )}
-      <a className="dropdown-item" href="/pricing">
-        <Icon name="zap" size={14} />
-        <span>{isGifted ? "Subscribe to keep it" : tier.paid ? "Manage plan" : "Plans & Pay-As-You-Chat"}</span>
-      </a>
-    </div>
+    </>
   );
 
   function renderMessageContent(content: string, stream = false) {
@@ -568,18 +593,17 @@ export default function ChatPage() {
       <section className="app-main ui-card">
         <header className="topbar">
           <div className="topbar-left">
-            {(sidebarCollapsed || !sidebarOpen) && (
-              <button
-                className="icon-btn sidebar-toggle-top"
-                onClick={() => {
-                  if (window.innerWidth <= 900) setSidebarOpen(true);
-                  else setSidebarCollapsed(false);
-                }}
-                title="Open Sidebar"
-              >
-                <Icon name="menu" size={18} />
-              </button>
-            )}
+            <button
+              className="icon-btn sidebar-toggle-top"
+              onClick={() => {
+                if (window.innerWidth <= 900) setSidebarOpen(true);
+                else setSidebarCollapsed(false);
+              }}
+              title="Open Sidebar"
+              aria-label="Open Sidebar"
+            >
+              <Icon name="menu" size={18} />
+            </button>
           </div>
 
           <div className="topbar-right">
@@ -591,7 +615,10 @@ export default function ChatPage() {
 
         {/* MESSAGES AREA */}
         <main className="chat-main">
-          <div className="chat-messages">
+          <div
+            className={`chat-messages ${messages.length === 0 ? "is-empty" : ""}`}
+            ref={chatMessagesRef}
+          >
             {messages.length === 0 && (
               <section className="empty-state wireframe-empty desktop-hero">
                 <h1 className="hero-heading">What should we focus on?</h1>
@@ -608,6 +635,10 @@ export default function ChatPage() {
                   />
 
                   {planDropdownOpen && planDropdown}
+
+                  <div className="composer-disclaimer">
+                    By messaging Kris&apos;s Script, you agree to our Terms and Privacy Policy.
+                  </div>
                 </div>
 
                 <div className="prompt-row">
@@ -716,13 +747,15 @@ export default function ChatPage() {
 
                 <div style={{ marginTop: 12, textAlign: "center" }}>
                   <a className="btn ghost small" href="/pricing">
-                    <span>Manage on Billing Page</span>
+                    <span>Manage on Pricing Page</span>
                     <Icon name="arrow-up-right" size={14} />
                   </a>
                 </div>
               </div>
             )}
-            <div ref={bottomRef} />
+            {messages.length > 0 && (
+              <div ref={bottomRef} style={{ height: 40, flexShrink: 0 }} />
+            )}
           </div>
 
           {messages.length > 0 && (
@@ -738,6 +771,10 @@ export default function ChatPage() {
               />
 
               {planDropdownOpen && planDropdown}
+
+              <div className="composer-disclaimer">
+                By messaging Kris&apos;s Script, you agree to our Terms and Privacy Policy.
+              </div>
             </div>
           )}
         </main>

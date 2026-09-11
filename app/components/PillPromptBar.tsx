@@ -6,7 +6,7 @@ import Icon from "./Icon";
 type Props = {
   value: string;
   onChange: (v: string) => void;
-  /** Receives the composed message (input text + any attachment names). */
+  /** Receives the composed message. */
   onSubmit: (composed: string) => void;
   disabled?: boolean;
   placeholder?: string;
@@ -29,42 +29,34 @@ const CONTEXTS = [
   { name: "@Docs", desc: "Beautiful UI design documentation" },
 ];
 
-const SKILLS = [
-  { id: "deep-research", name: "Deep research" },
-  { id: "code-review", name: "Code review" },
-  { id: "web-search", name: "Web search" },
-  { id: "summarize", name: "Summarize" },
-];
-
-type Attachment = { id: number; name: string; kind: "image" | "file" };
-
 export default function PillPromptBar({
   value,
   onChange,
   onSubmit,
   disabled,
-  placeholder = "Ask Kris's Script or type / for commands, @ for context...",
+  placeholder = "Ask Kris's Script anything...",
   planLabel,
   tierId,
   onTogglePlan,
 }: Props) {
   const [showCommands, setShowCommands] = useState(false);
   const [showContexts, setShowContexts] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [exitingAtt, setExitingAtt] = useState<number[]>([]);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
-  const plusRef = useRef<HTMLDivElement>(null);
-  const nextId = useRef(1);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-focus text input on mount or when disabled state ends
+  // Auto-resize textarea to fit content smoothly up to max height
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const nextH = Math.min(Math.max(el.scrollHeight, 44), 220);
+    el.style.height = `${nextH}px`;
+  }, [value]);
+
+  // Auto-focus textarea on mount or when disabled state ends
   useEffect(() => {
     if (!disabled) {
-      textInputRef.current?.focus();
+      textareaRef.current?.focus();
     }
   }, [disabled]);
 
@@ -81,104 +73,23 @@ export default function PillPromptBar({
     }
   }, [value]);
 
-  // Dismiss the + menu on outside pointerdown or Escape
-  useEffect(() => {
-    if (!menuOpen) {
-      setSkillsOpen(false);
-      return;
-    }
-    function onPointerDown(e: PointerEvent) {
-      if (!plusRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        textInputRef.current?.focus();
-      }
-    }
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [menuOpen]);
-
-  /** Input text plus any attachment names, so filenames reach the model. */
-  function composed() {
-    if (attachments.length === 0) return value.trim();
-    const names = attachments.map((a) => `@${a.kind}:${a.name}`).join(" ");
-    return `${names} ${value.trim()}`.trim();
-  }
-
-  const canSend = !disabled && (value.trim().length > 0 || attachments.length > 0);
+  const canSend = !disabled && value.trim().length > 0;
 
   function submit() {
     if (!canSend) return;
     setShowCommands(false);
     setShowContexts(false);
-    setMenuOpen(false);
-    const text = composed();
-    setAttachments([]);
-    setExitingAtt([]);
+    const text = value.trim();
     onSubmit(text);
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      submit();
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
     }
   }
 
-  function openPicker(kind: "image" | "file") {
-    const el = fileInputRef.current;
-    if (!el) return;
-    el.accept = kind === "image" ? "image/*" : "";
-    el.dataset.kind = kind;
-    el.click();
-    setMenuOpen(false);
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    const fallback = (e.target.dataset.kind as "image" | "file") ?? "file";
-    setAttachments((prev) => [
-      ...prev,
-      ...files.map((f) => ({
-        id: nextId.current++,
-        name: f.name,
-        kind: f.type.startsWith("image/") ? ("image" as const) : fallback,
-      })),
-    ]);
-    e.target.value = "";
-    textInputRef.current?.focus();
-  }
-
-  function removeAttachment(id: number) {
-    setExitingAtt((prev) => [...prev, id]);
-    setTimeout(() => {
-      setAttachments((prev) => prev.filter((a) => a.id !== id));
-      setExitingAtt((prev) => prev.filter((x) => x !== id));
-    }, 200);
-  }
-
-  function addSkill(id: string) {
-    const token = `/${id} `;
-    onChange(value ? `${value.replace(/\s*$/, "")} ${token}` : token);
-    setMenuOpen(false);
-    textInputRef.current?.focus();
-  }
-
-  function toggleDictation() {
-    setIsRecording(!isRecording);
-    if (!isRecording) {
-      setTimeout(() => {
-        onChange(value ? `${value} [voice input]` : "Explain the agent workflow.");
-        setIsRecording(false);
-        textInputRef.current?.focus();
-      }, 2000);
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
     }
   }
 
@@ -196,7 +107,7 @@ export default function PillPromptBar({
               onClick={() => {
                 onChange(`${c.cmd} `);
                 setShowCommands(false);
-                textInputRef.current?.focus();
+                textareaRef.current?.focus();
               }}
             >
               <strong className="cmd-name">{c.cmd}</strong>
@@ -218,7 +129,7 @@ export default function PillPromptBar({
               onClick={() => {
                 onChange(value.replace(/@\w*$/, `${ctx.name} `));
                 setShowContexts(false);
-                textInputRef.current?.focus();
+                textareaRef.current?.focus();
               }}
             >
               <strong className="cmd-name">{ctx.name}</strong>
@@ -229,191 +140,60 @@ export default function PillPromptBar({
       )}
 
       <form
-        className="pill-prompt"
+        className="pill-prompt grok-composer"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <input
-          type="file"
-          multiple
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          style={{ display: "none" }}
-        />
-
-        {/* ATTACH + SKILLS MENU */}
-        <div className="plus-wrap" ref={plusRef}>
-          <button
-            className="composer-action-btn plus-btn"
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            data-open={menuOpen || undefined}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            title="Attach files or add a skill"
-          >
-            <span className="plus-glyph">
-              <Icon name="plus" size={18} />
-            </span>
-          </button>
-
-          {menuOpen && (
-            <div className="composer-menu" role="menu">
-              <button
-                type="button"
-                className="composer-menu-item"
-                role="menuitem"
-                onClick={() => openPicker("image")}
-              >
-                <span className="menu-icon">
-                  <Icon name="image" size={15} />
-                </span>
-                <span className="menu-name">Add photos</span>
-              </button>
-              <button
-                type="button"
-                className="composer-menu-item"
-                role="menuitem"
-                onClick={() => openPicker("file")}
-              >
-                <span className="menu-icon">
-                  <Icon name="paperclip" size={15} />
-                </span>
-                <span className="menu-name">Attach files</span>
-              </button>
-
-              <div className="composer-menu-divider" />
-
-              <div
-                className="composer-menu-sub"
-                onMouseEnter={() => setSkillsOpen(true)}
-                onMouseLeave={() => setSkillsOpen(false)}
-              >
-                <button
-                  type="button"
-                  className="composer-menu-item"
-                  role="menuitem"
-                  aria-haspopup="menu"
-                  aria-expanded={skillsOpen}
-                  onClick={() => setSkillsOpen((o) => !o)}
-                >
-                  <span className="menu-icon">
-                    <Icon name="zap" size={15} />
-                  </span>
-                  <span className="menu-name">Skills</span>
-                  <span className="menu-chevron">
-                    <Icon name="chevron-right" size={14} />
-                  </span>
-                </button>
-
-                {skillsOpen && (
-                  <div className="composer-menu-flyout" role="menu">
-                    {SKILLS.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        className="composer-menu-item"
-                        role="menuitem"
-                        onClick={() => addSkill(s.id)}
-                      >
-                        <span className="menu-name">/{s.id}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="composer-menu-divider" />
-              <div className="composer-menu-label">Model</div>
-              <div className="composer-menu-item static" aria-disabled>
-                <span className="menu-icon">
-                  <Icon name="model" size={13} />
-                </span>
-                <span className="menu-name">DeepSeek Chat</span>
-                <span className="menu-check">
-                  <Icon name="check" size={14} />
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="composer-field">
-          {/* ATTACHMENT CHIPS */}
-          {attachments.length > 0 && (
-            <div className="composer-chips">
-              {attachments.map((a) => (
-                <span
-                  key={a.id}
-                  className="composer-chip"
-                  data-exit={exitingAtt.includes(a.id) || undefined}
-                >
-                  <span className="chip-icon">
-                    <Icon name={a.kind === "image" ? "image" : "file"} size={13} />
-                  </span>
-                  <span className="chip-name">{a.name}</span>
-                  <button
-                    type="button"
-                    className="chip-remove"
-                    onClick={() => removeAttachment(a.id)}
-                    aria-label={`Remove ${a.name}`}
-                  >
-                    <Icon name="x" size={12} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <input
-            ref={textInputRef}
-            type="text"
+        {/* TOP MULTILINE TEXT INPUT */}
+        <div className="composer-input-area">
+          <textarea
+            ref={textareaRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             maxLength={4000}
-            className="pill-input"
+            rows={1}
+            className="grok-textarea"
             autoFocus
           />
         </div>
 
-        {/* DICTATION MIC */}
-        <button
-          type="button"
-          className={`mic-btn ${isRecording ? "recording" : ""}`}
-          onClick={toggleDictation}
-          title={isRecording ? "Listening..." : "Voice Dictation"}
-        >
-          <Icon name="mic" size={16} />
-        </button>
+        {/* BOTTOM TOOLBAR */}
+        <div className="composer-toolbar">
+          <div className="toolbar-left">
+            {/* EMBEDDED PLAN BADGE (if plan provided) */}
+            {planLabel && (
+              <div className="embedded-plan-wrap">
+                <button
+                  className={`embedded-plan-pill${tierId ? ` tier-${tierId}` : ""}`}
+                  type="button"
+                  onClick={() => onTogglePlan && onTogglePlan()}
+                  title="Click to view plan allowance"
+                >
+                  <span className="dot" />
+                  <span>{planLabel}</span>
+                </button>
+              </div>
+            )}
+          </div>
 
-        {/* EMBEDDED PLAN BADGE */}
-        {planLabel && (
-          <div className="embedded-plan-wrap">
+          <div className="toolbar-right">
+            {/* SEND BUTTON */}
             <button
-              className={`embedded-plan-pill${tierId ? ` tier-${tierId}` : ""}`}
-              type="button"
-              onClick={() => onTogglePlan && onTogglePlan()}
+              className={`composer-send-btn ${canSend ? "active" : ""}`}
+              disabled={disabled || !canSend}
+              title={canSend ? "Send message (Enter)" : "Type a message to send"}
+              type="submit"
             >
-              <span className="dot" />
-              <span>{planLabel}</span>
+              <span className="send-arrow">
+                <Icon name="arrow-up" size={18} strokeWidth={2.4} />
+              </span>
             </button>
           </div>
-        )}
-
-        <button
-          className={`composer-send-btn ${canSend ? "active" : ""}`}
-          disabled={!canSend}
-          title="Send message (Enter)"
-          type="submit"
-        >
-          <span className="send-arrow">
-            <Icon name="arrow-up" size={17} strokeWidth={2} />
-          </span>
-        </button>
+        </div>
       </form>
     </div>
   );

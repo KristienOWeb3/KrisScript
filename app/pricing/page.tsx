@@ -91,6 +91,7 @@ export default function PricingPage() {
   }
 
   useEffect(() => {
+    document.title = "Pricing · Kris's Script";
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -291,7 +292,7 @@ export default function PricingPage() {
             <div className="mark">KS</div>
             <div className="brand-copy">
               <div className="brand-title">Kris&apos;s Script</div>
-              <div className="brand-meta">Pay-As-You-Go Billing</div>
+              <div className="brand-meta">Pricing</div>
             </div>
           </div>
         </div>
@@ -341,29 +342,30 @@ export default function PricingPage() {
       <main className="app-main">
         <header className="topbar">
           <div className="topbar-left">
-            <a className="icon-btn" href="/chat" title="Back to Chat">
+            <a className="icon-btn" href="/chat" title="Back to Chat" aria-label="Back to Chat">
               <Icon name="arrow-left" size={17} />
             </a>
             <div className="topbar-title">
-              <strong style={{ fontSize: "1rem" }}>Pay-As-You-Go Billing</strong>
+              <strong style={{ fontSize: "1rem" }}>Pricing</strong>
             </div>
           </div>
 
           <div className="topbar-right">
             <button
-              className="btn ghost small"
+              type="button"
+              className={`btn ghost small refresh-status-btn ${isSyncing ? "is-syncing" : ""}`}
               onClick={syncStatus}
               disabled={isSyncing}
-              style={{ fontSize: "0.85rem", padding: "4px 10px" }}
+              title="Refresh subscription and balance status"
+              aria-label="Refresh status"
             >
-              {isSyncing ? (
-                  "Syncing..."
-                ) : (
-                  <>
-                    <Icon name="refresh" size={14} />
-                    <span>Refresh Status</span>
-                  </>
-                )}
+              <Icon name="refresh" size={14} className={isSyncing ? "spin-icon" : ""} />
+              <span className="refresh-label-full">
+                {isSyncing ? "Syncing..." : "Refresh Status"}
+              </span>
+              <span className="refresh-label-short">
+                {isSyncing ? "Syncing..." : "Refresh"}
+              </span>
             </button>
             {me?.devMode && <span className="badge dev">DEV MODE</span>}
             {user && <span className={`badge ${tier.id}`}>{tier.label}</span>}
@@ -374,7 +376,7 @@ export default function PricingPage() {
           <div className="page-head">
             <div>
               <h1 className="hero-heading" style={{ textAlign: "left", fontSize: "2.2rem" }}>
-                Pay-As-You-Go Billing
+                Pricing
               </h1>
               <p className="subtitle">
                 Kris&apos;s Script gives you 3 free trial messages. After 3 messages, pay-as-you-go metered billing ($0.10/msg) is handled seamlessly via your SubScript vault.
