@@ -142,7 +142,7 @@ interface Backend {
 
 async function init(): Promise<Backend> {
   if (process.env.DATABASE_URL) {
-    // Production: any Postgres (Neon, Supabase, RDS…) via connection string.
+    // Production: any Postgres (self-hosted on the VPS, Neon, RDS…) via connection string.
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
     await pool.query(SCHEMA);
@@ -153,12 +153,12 @@ async function init(): Promise<Backend> {
       },
     };
   }
-  if (process.env.VERCEL) {
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
     throw new Error(
-      "DATABASE_URL is required on Vercel. Without a durable Postgres database, payment and chat state can disappear between serverless invocations."
+      "DATABASE_URL is required in production. The embedded PGlite fallback is for local development only: real payment state must live in a Postgres you back up."
     );
   }
-  // No DATABASE_URL outside Vercel: embedded Postgres (PGlite), zero setup.
+  // No DATABASE_URL in development: embedded Postgres (PGlite), zero setup.
   // Persists to data/pglite locally.
   const { PGlite } = await import("@electric-sql/pglite");
   const { mkdirSync } = await import("fs");

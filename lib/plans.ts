@@ -1,6 +1,6 @@
 export const FREE_MESSAGE_CAP = 3;
-export const PAYG_PRICE_USDC = "0.10";
-export const PAYG_PRICE_USDC_MICROS = "100000";
+export const PAYG_PRICE_USDC = "0.01";
+export const PAYG_PRICE_USDC_MICROS = "10000";
 export const DEV_VAULT_COMMIT_USDC = 5.0;
 
 /** Default simulated thinking time (in ms) on FREE and SUBSCRIBED billing; PAYG is never delayed. */
@@ -14,10 +14,10 @@ export const NAME_CHANGE_PRICE_USDC_MICROS = "1000000";
  * Monthly recurring via SubScript. Each tier grants a message allowance
  * that resets when the subscription renews.
  *
- * Note the deliberate pricing: every tier works out to $0.20 per message,
- * twice the $0.10 metered rate. That is intentional per product decision —
- * plans are a commitment product, not a volume discount — so do not
- * "helpfully" rebalance the numbers without asking.
+ * Prices set Nov 2026 for mainnet: $1 / $1.50 / $2 a month, with metered
+ * pay-as-you-chat at $0.01 a message. Plans are a commitment product, not a
+ * volume discount, so do not "helpfully" rebalance prices or allowances
+ * without asking.
  * ─────────────────────────────────────────────────────────────────── */
 
 export type PlanId = "pro" | "promax" | "ultra";
@@ -35,22 +35,22 @@ export const PLANS: Record<PlanId, Plan> = {
   pro: {
     id: "pro",
     name: "Pro",
-    priceUsdc: "2.00",
-    priceUsdcMicros: "2000000",
+    priceUsdc: "1.00",
+    priceUsdcMicros: "1000000",
     messages: 10,
   },
   promax: {
     id: "promax",
     name: "Pro Max",
-    priceUsdc: "5.00",
-    priceUsdcMicros: "5000000",
+    priceUsdc: "1.50",
+    priceUsdcMicros: "1500000",
     messages: 25,
   },
   ultra: {
     id: "ultra",
     name: "Ultra",
-    priceUsdc: "10.00",
-    priceUsdcMicros: "10000000",
+    priceUsdc: "2.00",
+    priceUsdcMicros: "2000000",
     messages: 50,
   },
 };

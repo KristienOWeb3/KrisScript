@@ -14,7 +14,7 @@ type Msg = { role: string; content: string; billed?: string | null };
 
 function billLabel(billed: string): string {
   if (billed === "free") return "free message";
-  if (billed === "payg") return "billed $0.10 (pay-as-you-chat)";
+  if (billed === "payg") return "billed $0.01 (pay-as-you-chat)";
   /* messages.billed holds "free", "payg", or a plan id. */
   const name = billed in PLANS ? PLANS[billed as keyof typeof PLANS].name : undefined;
   return name ? `included in ${name}` : billed;
@@ -240,7 +240,7 @@ export default function ChatPage() {
       : planActive
         ? `${user.planRemaining} of ${user.planCap} left this month`
         : isPayg
-          ? "$0.10 per message"
+          ? "$0.01 per message"
           : "No messages left";
   /* Short form, for the pill wedged in beside the send button. */
   const allowanceShort =
@@ -249,7 +249,7 @@ export default function ChatPage() {
       : planActive
         ? `${user.planRemaining}/${user.planCap} left`
         : isPayg
-          ? "$0.10/msg"
+          ? "$0.01/msg"
           : "0 left";
   /* From /api/me's shared definition, not re-derived: a cancellation and a gifted
      period are both live and both ending, and the two surfaces answered that
@@ -704,7 +704,7 @@ export default function ChatPage() {
 
                 <div style={{ marginTop: 14, textAlign: "left", background: "#1c1d1f", padding: 14, borderRadius: 10, border: "1px solid var(--line-strong)" }}>
                   <span style={{ fontSize: "0.84rem", color: "#3dbb72", fontWeight: 650, display: "block", marginBottom: 6 }}>
-                    <Icon name="zap" size={13} /> Enable SubScript Pay-As-You-Go ($0.10/msg):
+                    <Icon name="zap" size={13} /> Enable SubScript Pay-As-You-Go ($0.01/msg):
                   </span>
                   <ol style={{ margin: "0 0 10px 0", paddingLeft: 18, fontSize: "0.82rem", color: "var(--ink-2)" }}>
                     <li>

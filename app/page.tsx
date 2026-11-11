@@ -39,13 +39,13 @@ export default function Home() {
             </h1>
             <p className="subtitle" style={{ maxWidth: 560 }}>
               A focused AI chat workspace powered by DeepSeek & SubScript. Start with 3 free messages,
-              then pay per message ($0.10/msg) with SubScript Pay-As-You-Go metered billing.
+              then pay per message ($0.01/msg) with SubScript Pay-As-You-Go metered billing.
             </p>
           </div>
           <div className="auth-preview">
             <div className="terminal-line">signup - instant chat unlocked</div>
             <div className="terminal-line">free - 3 trial messages included</div>
-            <div className="terminal-line">report-usage - $0.10 SubScript PAYG</div>
+            <div className="terminal-line">report-usage - $0.01 SubScript PAYG</div>
           </div>
         </section>
         <section className="card">

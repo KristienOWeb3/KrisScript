@@ -5,15 +5,15 @@ An AI chat platform (DeepSeek-powered) built to **field-test the [SubScript](htt
 | SubScript claim | How Kris's Script tests it |
 |---|---|
 | One-time payments | $1 account-activation fee at signup (hosted checkout intent) |
-| Subscription billing | Pro ($2/week) and Pro Max ($5/week) recurring subscriptions |
-| Payment for service (metered) | "Pay as you chat" — $0.10 per message via vault `report-usage` |
+| Subscription billing | Pro ($1/month), Pro Max ($1.50/month) and Ultra ($2/month) recurring subscriptions |
+| Payment for service (metered) | "Pay as you chat" — $0.01 per message via vault `report-usage` |
 
 Free users (including those who paid the $1 fee) get **3 messages total**, then must upgrade or enable pay-as-you-chat.
 
 ## Stack
 
 - **Next.js 15** (App Router) + React 19
-- **Postgres** — required `DATABASE_URL` in production (Neon/Supabase/etc.); embedded Postgres ([PGlite](https://pglite.dev)) in `data/pglite` locally with zero setup
+- **Postgres** — required `DATABASE_URL` in production (self-hosted on the VPS); embedded Postgres ([PGlite](https://pglite.dev)) in `data/pglite` locally with zero setup
 - **DeepSeek** chat completions (`deepseek-chat`)
 - **SubScript** REST API — checkout intents, HMAC-signed webhooks, metered usage reporting. No SDK; plain `fetch`.
 
@@ -52,6 +52,68 @@ npm run simulate:webhook <intent_id>   # intent id is in the checkout URL / API 
 ```
 
 The script signs the payload exactly per SubScript's documented scheme (`t=<unix>,v1=HMAC_SHA256(secret, "t.body")`).
+
+## Deploying to a VPS (mainnet)
+
+Production runs on a single Ubuntu VPS: Next.js under systemd, Postgres on the same box (localhost only), Caddy in front for automatic HTTPS. Files are in [`deploy/`](deploy).
+
+**Boot check.** In production, [`instrumentation.ts`](instrumentation.ts) refuses to start the server unless `DATABASE_URL`, a 32+ char `AUTH_SECRET`, an `https://` `APP_URL`, an `sk_live_` SubScript key, the webhook secret and `DEEPSEEK_API_KEY` are all set. A deploy that starts is configured.
+
+### One-time server setup (as root, Ubuntu 24.04)
+
+```bash
+apt update && apt install -y postgresql caddy git ufw
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt install -y nodejs
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw enable
+adduser --disabled-password --gecos "" kris
+sudo -u postgres createuser kris
+sudo -u postgres createdb -O kris krisscript
+sudo -u postgres psql -c "ALTER USER kris PASSWORD '<db-password>';"
+```
+
+### App
+
+```bash
+sudo -iu kris
+git clone https://github.com/KristienOWeb3/KrisScript.git app && cd app
+cp .env.example .env.production && nano .env.production   # fill in, see below
+chmod 600 .env.production
+npm ci && npm run build
+```
+
+`.env.production`:
+
+```
+DATABASE_URL=postgres://kris:<db-password>@localhost:5432/krisscript
+SUBSCRIPT_SECRET_KEY=sk_live_...
+SUBSCRIPT_WEBHOOK_SECRET=<secret of the LIVE webhook endpoint>
+APP_URL=https://app.yourdomain.com
+AUTH_SECRET=<64 hex chars>
+DEEPSEEK_API_KEY=<key>
+```
+
+Then, back as root:
+
+```bash
+cp /home/kris/app/deploy/kris-script.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now kris-script
+cp /home/kris/app/deploy/Caddyfile /etc/caddy/Caddyfile   # edit the hostname first
+systemctl reload caddy
+echo 'kris ALL=(root) NOPASSWD: /usr/bin/systemctl restart kris-script' > /etc/sudoers.d/kris-script
+```
+
+Point your domain's A record at the VPS before reloading Caddy so it can get the certificate. Tables are created automatically on first boot.
+
+**Updates:** `bash deploy/update.sh` as `kris` (pull, `npm ci`, build, restart).
+**Logs:** `journalctl -u kris-script -f`.
+**Backups:** add the cron line from [`deploy/backup.sh`](deploy/backup.sh) and copy `/home/kris/backups` off the server.
+
+### SubScript mainnet checklist
+
+1. Create an **`sk_live_`** key and register a **live** webhook endpoint at `https://app.yourdomain.com/api/webhooks/subscript`. Test keys, endpoints and secrets do not carry over.
+2. Publish the plans on mainnet: `npm run plans:bootstrap` with the live key (needs `ADMIN_RESET_SECRET` set; unset it again afterwards).
+3. **Remove the plans you published with the test key.** SubScript's plan catalogue has no test/live separation, so sandbox plans appear alongside live ones and can be bought with real USDC.
+4. Fire `POST /api/webhooks/test` from SubScript, then make one real $1 activation and confirm it fulfils. If a webhook goes missing, `POST /api/billing/reconcile` pulls the status.
 
 ## Deploying to Vercel
 
@@ -142,7 +204,7 @@ app/api/billing/checkout   Create subscription checkouts + the plan catalogue (G
 app/api/billing/payg       Enable/disable pay-as-you-chat + save the Commit ID
 app/api/admin/bootstrap-plans  Publish the three tiers as SubScript catalogue plans (idempotent)
 app/api/webhooks/subscript HMAC verification, atomic event claim, fulfillment
-app/api/chat               Message gating + DeepSeek + $0.10 usage reporting
+app/api/chat               Message gating + DeepSeek + $0.01 usage reporting
 app/api/dev/complete       Dev-mode simulated checkout completion (404s in production)
 lib/subscript.ts           All SubScript API calls + signature verify/sign
 lib/billing.ts             Idempotent fulfillment, subscription lifecycle, gifts, standing

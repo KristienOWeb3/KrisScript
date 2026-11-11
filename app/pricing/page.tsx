@@ -314,7 +314,7 @@ export default function PricingPage() {
           </div>
           <div className="recent-item">
             <Icon name="zap" size={14} />
-            <span className="recent-title">SubScript Pay-As-You-Go ($0.10/msg)</span>
+            <span className="recent-title">SubScript Pay-As-You-Go ($0.01/msg)</span>
           </div>
         </div>
 
@@ -379,7 +379,7 @@ export default function PricingPage() {
                 Pricing
               </h1>
               <p className="subtitle">
-                Kris&apos;s Script gives you 3 free trial messages. After 3 messages, pay-as-you-go metered billing ($0.10/msg) is handled seamlessly via your SubScript vault.
+                Kris&apos;s Script gives you 3 free trial messages. After 3 messages, pay-as-you-go metered billing ($0.01/msg) is handled seamlessly via your SubScript vault.
               </p>
             </div>
           </div>
@@ -480,7 +480,7 @@ export default function PricingPage() {
                     <span className="badge payg">METERED</span>
                   </div>
                   <div className="price">
-                    $0.10 <small>/ message</small>
+                    $0.01 <small>/ message</small>
                   </div>
                 </div>
                 

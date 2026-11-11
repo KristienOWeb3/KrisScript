@@ -3,7 +3,17 @@ import { cookies } from "next/headers";
 import { one } from "./db";
 import type { PlanId } from "./plans";
 
-const SECRET = process.env.AUTH_SECRET || "kris-script-dev-secret";
+/* The dev fallback is committed to a public repo, so in production it would let
+   anyone forge a session cookie. Resolved lazily (not at import) so `next build`
+   can still import this module without the secret present. */
+function sessionSecret(): string {
+  const s = process.env.AUTH_SECRET;
+  if (s && s.length >= 32 && s !== "change-me-to-a-long-random-string") return s;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET must be set to a random string of 32+ characters in production.");
+  }
+  return "kris-script-dev-secret";
+}
 const SESSION_TTL = 365 * 86400;
 
 export type User = {
@@ -53,7 +63,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 }
 
 function sign(value: string): string {
-  return crypto.createHmac("sha256", SECRET).update(value).digest("hex");
+  return crypto.createHmac("sha256", sessionSecret()).update(value).digest("hex");
 }
 
 export async function createSession(userId: number) {

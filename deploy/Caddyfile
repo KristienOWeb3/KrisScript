@@ -1,0 +1,7 @@
+# /etc/caddy/Caddyfile
+# Replace the hostname with your domain. Its DNS A record must point at this
+# VPS before Caddy starts, so it can obtain the HTTPS certificate.
+app.yourdomain.com {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:3000
+}

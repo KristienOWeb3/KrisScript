@@ -1,0 +1,25 @@
+# /etc/systemd/system/kris-script.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now kris-script
+#   journalctl -u kris-script -f     # logs
+[Unit]
+Description=Kris's Script (Next.js)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=kris
+WorkingDirectory=/home/kris/app
+EnvironmentFile=/home/kris/app/.env.production
+Environment=NODE_ENV=production
+# Bound to localhost only: Caddy is the sole public entry point.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
