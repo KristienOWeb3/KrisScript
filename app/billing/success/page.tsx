@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PLANS, isPlanId } from "@/lib/plans";
+import { PLANS, isPlanId, NAME_CHANGE_PRICE_USDC } from "@/lib/plans";
 
 /* ─────────────────────────────────────────────────────────
  * SUBSCRIPT RETURN LANDING
@@ -184,7 +184,7 @@ export default function BillingSuccessPage() {
             ) : (
               <>
                 <div>
-                  Waiting for SubScript to confirm the $1.00 USDC charge.
+                  Waiting for SubScript to confirm the ${NAME_CHANGE_PRICE_USDC} USDC charge.
                   {requestedName.current && (
                     <>
                       {" "}

@@ -39,6 +39,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_checkout_id TEXT;
 -- cannot be resolved by topping up USDC — the subscriber must re-authorize —
 -- so it has to reach them rather than sit in a log.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_alert TEXT;
+-- Who stopped the subscription renewing: 'app' (our Cancel button) or
+-- 'subscript' (the subscriber cancelled on SubScript / on-chain, learned from a
+-- webhook or a sync). Lets the UI say where it happened. Cleared whenever the
+-- subscription is live again.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_cancel_source TEXT;
 -- wallet_address used to hold EITHER a vault commit id or an on-chain address,
 -- because report-usage accepts both. That conflation meant the subscribe path
 -- could not tell whether it had an address to send as the subscriber, and since

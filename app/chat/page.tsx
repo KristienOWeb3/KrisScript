@@ -7,7 +7,7 @@ import PillPromptBar from "../components/PillPromptBar";
 import CodeBlock from "../components/CodeBlock";
 import Icon from "../components/Icon";
 import MessageActions from "../components/MessageActions";
-import { PLANS, tierView } from "../../lib/plans";
+import { PLANS, tierView, NAME_CHANGE_PRICE_USDC } from "../../lib/plans";
 import { useRouter } from "next/navigation";
 
 type Msg = { role: string; content: string; billed?: string | null };
@@ -73,7 +73,7 @@ export default function ChatPage() {
     }
   }
 
-  /** Start the $1 USDC display-name change and hand off to SubScript checkout. */
+  /** Start the paid display-name change and hand off to SubScript checkout. */
   async function startNameChange() {
     const requested = nameInput.trim();
     if (!requested || nameBusy) return;
@@ -260,7 +260,7 @@ export default function ChatPage() {
   const userName = user?.displayName || user?.email?.split("@")[0] || "";
   const userInitials = userName.charAt(0).toUpperCase();
   const pendingName: string | null = user?.pendingDisplayName ?? null;
-  const nameChangePrice = me?.nameChangePriceUsdc ?? "1.00";
+  const nameChangePrice = me?.nameChangePriceUsdc ?? NAME_CHANGE_PRICE_USDC;
 
   const filteredRecents = recents.filter((r) =>
     r.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -457,7 +457,7 @@ export default function ChatPage() {
             </div>
 
             <div className="modal-body">
-              {/* PAID DISPLAY NAME CHANGE — $1 USDC one-time via SubScript */}
+              {/* PAID DISPLAY NAME CHANGE — one-time via SubScript */}
               <div className="modal-card">
                 <div className="card-row">
                   <div>

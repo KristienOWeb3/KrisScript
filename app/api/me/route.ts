@@ -51,6 +51,8 @@ export async function GET() {
       planExpiresAt: quota.expiresAt,
       subCancelAtPeriodEnd: !!user.sub_cancel_at_period_end,
       subStatus: user.sub_status ?? null,
+      /* 'app' | 'subscript' | null: where a pending cancellation was made. */
+      subCancelSource: user.sub_cancel_source ?? null,
       /* Where the subscription stands, from one shared definition, so /pricing and
          /chat cannot reach different conclusions about whether it continues.
          willRenew is the question the UI actually asks: a cancelled subscription

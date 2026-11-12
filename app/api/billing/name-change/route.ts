@@ -8,7 +8,7 @@ import { normalizeDisplayName, resolveDisplayName } from "@/lib/displayName";
 const PRODUCT = "name_change";
 
 /**
- * Start a paid display-name change: $1 USDC one-time, via SubScript checkout.
+ * Start a paid display-name change: NAME_CHANGE_PRICE_USDC one-time, via SubScript checkout.
  *
  * The requested name is parked in users.pending_display_name and only becomes
  * the live display_name once the payment is fulfilled (webhook or return),

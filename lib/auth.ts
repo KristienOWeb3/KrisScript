@@ -39,6 +39,7 @@ export type User = {
   /** Standing lifecycle advisory, e.g. 'allowance_low'. Null when all is well. */
   sub_alert: string | null;
   sub_cancel_at_period_end: number;
+  sub_cancel_source: "app" | "subscript" | null;
   /** 1 when the current period was paid for by another account — a one-time
    *  gift with no standing authorization, so it will not renew. */
   plan_gifted: number;

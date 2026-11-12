@@ -114,7 +114,7 @@ export async function fulfillPayment(
   if (isPlanId(payment.product)) {
     const expiresAt = Math.floor(Date.now() / 1000) + PLAN_DURATION_SECONDS;
     await q(
-      "UPDATE users SET plan = $1, plan_expires_at = $2, sub_status = 'active', sub_cancel_at_period_end = 0, sub_alert = NULL WHERE id = $3",
+      "UPDATE users SET plan = $1, plan_expires_at = $2, sub_status = 'active', sub_cancel_at_period_end = 0, sub_cancel_source = NULL, sub_alert = NULL WHERE id = $3",
       [payment.product, expiresAt, payment.user_id]
     );
   }
@@ -682,6 +682,7 @@ export async function handleSubscriptionEvent(
                 wallet_address = COALESCE(wallet_address, $5::text),
                 sub_status = 'active',
                 sub_cancel_at_period_end = 0,
+                sub_cancel_source = NULL,
                 sub_alert = NULL,
                 plan_gifted = 0,
                 plan_gifted_by = NULL
@@ -726,6 +727,7 @@ export async function handleSubscriptionEvent(
                 wallet_address = COALESCE(wallet_address, $4::text),
                 sub_status = 'active',
                 sub_cancel_at_period_end = 0,
+                sub_cancel_source = NULL,
                 sub_alert = NULL
           WHERE id = $5`,
         [stated, subId, checkoutId, learnedAddress, userId]
@@ -760,7 +762,7 @@ export async function handleSubscriptionEvent(
     case "cancel_scheduled": {
       // Requested, effective at period end. Access continues until then.
       await q(
-        "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceling' WHERE id = $1",
+        "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceling', sub_cancel_source = COALESCE(sub_cancel_source, 'subscript') WHERE id = $1",
         [userId]
       );
       return { ok: true };
@@ -772,7 +774,7 @@ export async function handleSubscriptionEvent(
          already paid for — that window is exactly when subscription.reactivated
          can arrive — so plan_expires_at stands and the plan is not cleared. */
       await q(
-        "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled' WHERE id = $1",
+        "UPDATE users SET sub_cancel_at_period_end = 1, sub_status = 'canceled', sub_cancel_source = COALESCE(sub_cancel_source, 'subscript') WHERE id = $1",
         [userId]
       );
       return { ok: true };

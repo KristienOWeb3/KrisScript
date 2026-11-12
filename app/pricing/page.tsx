@@ -64,9 +64,25 @@ export default function PricingPage() {
          below shows whatever it changed. */
       await fetch("/api/billing/reconcile", { method: "POST" }).catch(() => {});
 
-      const data = await fetch("/api/me").then((r) => r.json());
+      let data = await fetch("/api/me").then((r) => r.json());
       if (!data.user) return router.replace("/login");
       setMe(data);
+
+      /* Then ask SubScript where the subscription stands. Webhooks are the fast
+         path but can be lost or refused (a delivery stamped for the wrong
+         environment is rejected on purpose), and before this ran on page load
+         the only pull was the manual Sync button — so a subscriber who cancelled
+         on SubScript kept seeing a live plan here. Only for accounts on a tier:
+         there is nothing to look up otherwise. Shown first, corrected after. */
+      if (data.user.plan && isPlanId(data.user.plan)) {
+        const synced = await fetch("/api/billing/sync", { method: "POST" })
+          .then((r) => r.json())
+          .catch(() => null);
+        if (synced?.synced) {
+          data = await fetch("/api/me").then((r) => r.json());
+          if (data.user) setMe(data);
+        }
+      }
       /* Not prefilled: what is already saved is shown as an "On file" hint
          under each input instead, so the boxes stay empty for new entry and a
          cleared field cannot be silently re-submitted. */
@@ -628,7 +644,13 @@ export default function PricingPage() {
                          useful action is to start a real subscription. */
                       <div className="payg-action-wrap">
                         <p className="payg-status">
-                          {user.planGifted ? "Gifted · ends " : "Ends "}
+                          {user.planGifted
+                            ? "Gifted · ends "
+                            : user.subCancelSource === "subscript"
+                              ? "Cancelled at SubScript · access until "
+                              : user.subCancelAtPeriodEnd
+                                ? "Cancelled · access until "
+                                : "Ends "}
                           {expiryLabel} · {user.planRemaining} of {user.planCap} left
                         </p>
                         <button

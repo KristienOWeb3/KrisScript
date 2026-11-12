@@ -98,7 +98,7 @@ export async function POST() {
   const gone = status === "canceled" || status === "cancelled" || status === "deleted";
   if (gone || cancelAtPeriodEnd) {
     const subStatus = gone ? "canceled" : "canceling";
-    await q("UPDATE users SET sub_cancel_at_period_end = 1, sub_status = $1 WHERE id = $2", [
+    await q("UPDATE users SET sub_cancel_at_period_end = 1, sub_status = $1, sub_cancel_source = COALESCE(sub_cancel_source, 'subscript') WHERE id = $2", [
       subStatus,
       user.id,
     ]);
@@ -125,7 +125,7 @@ export async function POST() {
     if (user.sub_cancel_at_period_end) {
       return Response.json({ synced: true, subStatus: user.sub_status, cancelAtPeriodEnd: true, periodEnd });
     }
-    await q("UPDATE users SET sub_status = 'active', sub_cancel_at_period_end = 0 WHERE id = $1", [
+    await q("UPDATE users SET sub_status = 'active', sub_cancel_at_period_end = 0, sub_cancel_source = NULL WHERE id = $1", [
       user.id,
     ]);
     return Response.json({ synced: true, subStatus: "active", cancelAtPeriodEnd: false, periodEnd });

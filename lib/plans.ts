@@ -7,8 +7,8 @@ export const DEV_VAULT_COMMIT_USDC = 5.0;
 export const DEFAULT_THINKING_TIME_MS = 4000;
 
 /** One-time charge to change the account display name. */
-export const NAME_CHANGE_PRICE_USDC = "1.00";
-export const NAME_CHANGE_PRICE_USDC_MICROS = "1000000";
+export const NAME_CHANGE_PRICE_USDC = "0.05";
+export const NAME_CHANGE_PRICE_USDC_MICROS = "50000";
 
 /* ── Subscription plans ───────────────────────────────────────────────
  * Monthly recurring via SubScript. Each tier grants a message allowance
